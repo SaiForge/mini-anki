@@ -19,8 +19,10 @@ export const AuthProvider = ({ children }) => {
 
     const login = async (email, password) => {
         const response = await axiosClient.post('/api/auth/login', { email, password });
-        localStorage.setItem('access_token', response.data.access_token);
+        const token = response.data.access_token;
+        localStorage.setItem('access_token', token);
         setIsAuthenticated(true);
+        return response.data;
     };
 
     const register = async (email, password) => {

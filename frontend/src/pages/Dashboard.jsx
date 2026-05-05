@@ -23,6 +23,7 @@ export default function Dashboard() {
     const [deckToDelete, setDeckToDelete] = useState(null);
     const [deletingDeck, setDeletingDeck] = useState(false);
     const [toast, setToast] = useState(null);
+    const [userProfile, setUserProfile] = useState(null);
     const longPressTimerRef = useRef(null);
     const frontTextareaRef = useRef(null);
 
@@ -40,7 +41,17 @@ export default function Dashboard() {
             }
         };
 
+        const fetchUserProfile = async () => {
+            try {
+                const response = await axiosClient.get('/api/auth/me');
+                setUserProfile(response.data);
+            } catch (err) {
+                console.error('Failed to fetch user profile', err);
+            }
+        };
+
         fetchDecks();
+        fetchUserProfile();
     }, []);
 
     useEffect(() => {
@@ -53,6 +64,13 @@ export default function Dashboard() {
 
         const activeDeckExists = decks.some((deck) => String(deck.deck_id) === String(selectedDeckId));
         if (activeDeckExists) {
+            return;
+        }
+
+        // Prioritize default deck
+        const defaultDeck = decks.find((deck) => deck.is_default === 1);
+        if (defaultDeck) {
+            setSelectedDeckId(String(defaultDeck.deck_id));
             return;
         }
 
@@ -232,9 +250,14 @@ export default function Dashboard() {
                         <h1 className="ma-brand">Mini Anki</h1>
                     </button>
                 </div>
-                <button type="button" className="ma-nav-link" onClick={logout}>
-                    Logout
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                    <span style={{ fontWeight: '500', fontSize: '0.9rem', color: 'var(--text-color, inherit)' }}>
+                        🔥 {userProfile ? userProfile.current_streak : 0} Streak
+                    </span>
+                    <button type="button" className="ma-nav-link" onClick={logout}>
+                        Logout
+                    </button>
+                </div>
             </header>
 
             {toast && (
@@ -251,7 +274,11 @@ export default function Dashboard() {
                     </div>
                     <div className="ma-title-actions">
                         {!loading && decks.length > 0 && (
-                            <button type="button" className="ma-btn ma-btn-secondary" onClick={openAddCardModal}>
+                            <button
+                                type="button"
+                                className="ma-btn ma-btn-secondary"
+                                onClick={openAddCardModal}
+                            >
                                 Add Card
                             </button>
                         )}
@@ -289,8 +316,14 @@ export default function Dashboard() {
                             >
                                 <div className="ma-tag">Deck</div>
                                 <h3 className="ma-headline-md">{deck.title}</h3>
-                                <p className="ma-subtle-text">Created {new Date(deck.created_at).toLocaleDateString()}</p>
-                                <p className="ma-hold-hint">Tap and hold to delete</p>
+                                {deck.is_default === 0 ? (
+                                    <>
+                                        <p className="ma-subtle-text">Created {new Date(deck.created_at).toLocaleDateString()}</p>
+                                        <p className="ma-hold-hint">Tap and hold to delete</p>
+                                    </>
+                                ) : (
+                                    <div style={{ height: '3rem' }} />
+                                )}
                                 <button
                                     type="button"
                                     className="ma-btn ma-btn-card"
@@ -330,7 +363,7 @@ export default function Dashboard() {
                                     }}
                                     required
                                 >
-                                    {decks.map((deck) => (
+                                    {decks.filter(deck => deck.is_default !== 1).map((deck) => (
                                         <option key={deck.deck_id} value={String(deck.deck_id)}>
                                             {deck.title}
                                         </option>

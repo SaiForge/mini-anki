@@ -26,7 +26,18 @@ export default function StudySession() {
             }
         };
 
+        const checkIn = async () => {
+            try {
+                // Check in to the deck (only works for default deck, fails silently for others)
+                await axiosClient.post(`/api/study/${deckId}/check-in`);
+            } catch (err) {
+                // Silently fail - only default deck check-in matters
+                console.log('Check-in skipped (non-default deck or error)');
+            }
+        };
+
         fetchCards();
+        checkIn();
     }, [deckId]);
 
     useEffect(() => {

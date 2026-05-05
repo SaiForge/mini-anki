@@ -1,8 +1,10 @@
 // frontend/src/pages/Login.jsx
 import { useState, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 
 export default function Login() {
+    const navigate = useNavigate();
     const { login, register } = useContext(AuthContext);
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
@@ -18,6 +20,8 @@ export default function Login() {
             } else {
                 await register(email, password);
             }
+            // Navigate to dashboard after successful login/registration
+            navigate('/dashboard');
         } catch (err) {
             setError(err.response?.data?.detail || 'An error occurred. Try again!');
         }
