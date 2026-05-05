@@ -27,7 +27,7 @@ services:
     depends_on:
       - db
     volumes:
-      - ./backend:/app # Syncs your local code to the container for hot-reloading
+      - ./backend:/app
 
   frontend:
     build: ./frontend

@@ -39,3 +39,5 @@ frontend/.vite/
 # Editor settings
 .vscode/
 .idea/
+
+ANKI_INTERVIEW_FLASHCARDS.md
