@@ -24,6 +24,9 @@ export default function Dashboard() {
     const [deletingDeck, setDeletingDeck] = useState(false);
     const [toast, setToast] = useState(null);
     const [userProfile, setUserProfile] = useState(null);
+    const [newDeckName, setNewDeckName] = useState('');
+    const [creatingDeck, setCreatingDeck] = useState(false);
+    const [deckFormError, setDeckFormError] = useState('');
     const longPressTimerRef = useRef(null);
     const frontTextareaRef = useRef(null);
 
@@ -157,17 +160,41 @@ export default function Dashboard() {
 
     const openAddCardModal = () => {
         setCardFormError('');
+        setDeckFormError('');
+        setNewDeckName('');
 
-        if (decks.length > 0) {
+        // Only regular decks (not default)
+        const regularDecks = decks.filter(deck => deck.is_default !== 1);
+        if (regularDecks.length > 0) {
             const storedDeckId = window.localStorage.getItem(LAST_USED_DECK_KEY);
             const storedDeckExists = storedDeckId
-                ? decks.some((deck) => String(deck.deck_id) === String(storedDeckId))
+                ? regularDecks.some((deck) => String(deck.deck_id) === String(storedDeckId))
                 : false;
-
-            setSelectedDeckId(storedDeckExists ? String(storedDeckId) : String(decks[0].deck_id));
+            setSelectedDeckId(storedDeckExists ? String(storedDeckId) : String(regularDecks[0].deck_id));
+        } else {
+            setSelectedDeckId('');
         }
-
         setIsAddCardModalOpen(true);
+    };
+
+    const handleCreateDeck = async (event) => {
+        event.preventDefault();
+        setDeckFormError('');
+        if (!newDeckName.trim()) {
+            setDeckFormError('Please enter a deck name.');
+            return;
+        }
+        try {
+            setCreatingDeck(true);
+            const response = await axiosClient.post('/api/decks/', { title: newDeckName });
+            setDecks(prev => [...prev, response.data]);
+            setSelectedDeckId(String(response.data.deck_id));
+            setNewDeckName('');
+        } catch (err) {
+            setDeckFormError(err.response?.data?.detail || 'Could not create deck.');
+        } finally {
+            setCreatingDeck(false);
+        }
     };
 
     const closeAddCardModal = () => {
@@ -346,73 +373,101 @@ export default function Dashboard() {
                                 Close
                             </button>
                         </div>
-                        <p className="ma-subtle-text">Choose a deck and add front/back text.</p>
+                        {decks.filter(deck => deck.is_default !== 1).length === 0 ? (
+                            <>
+                                <p className="ma-subtle-text">You need a deck before adding cards.</p>
+                                {deckFormError && <div className="ma-alert ma-alert-error">{deckFormError}</div>}
+                                <form className="ma-quick-add-form" onSubmit={handleCreateDeck}>
+                                    <label className="ma-field">
+                                        <span className="ma-label-chip ma-label-blue">DECK NAME</span>
+                                        <input
+                                            className="ma-input"
+                                            type="text"
+                                            value={newDeckName}
+                                            onChange={e => setNewDeckName(e.target.value)}
+                                            placeholder="Enter deck name"
+                                            required
+                                        />
+                                    </label>
+                                    <div className="ma-actions">
+                                        <button type="button" className="ma-btn ma-btn-secondary" onClick={closeAddCardModal}>
+                                            Cancel
+                                        </button>
+                                        <button type="submit" className="ma-btn ma-btn-primary" disabled={creatingDeck}>
+                                            {creatingDeck ? 'Creating...' : 'Create Deck'}
+                                        </button>
+                                    </div>
+                                </form>
+                            </>
+                        ) : (
+                            <>
+                                <p className="ma-subtle-text">Choose a deck and add front/back text.</p>
+                                {cardFormError && <div className="ma-alert ma-alert-error">{cardFormError}</div>}
+                                <form className="ma-quick-add-form" onSubmit={handleAddCard}>
+                                    <label className="ma-field">
+                                        <span className="ma-label-chip ma-label-blue">DECK</span>
+                                        <select
+                                            className="ma-input ma-select"
+                                            value={selectedDeckId}
+                                            onChange={(event) => {
+                                                const nextDeckId = event.target.value;
+                                                setSelectedDeckId(nextDeckId);
+                                                window.localStorage.setItem(LAST_USED_DECK_KEY, nextDeckId);
+                                            }}
+                                            required
+                                        >
+                                            {decks.filter(deck => deck.is_default !== 1).map((deck) => (
+                                                <option key={deck.deck_id} value={String(deck.deck_id)}>
+                                                    {deck.title}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </label>
 
-                        {cardFormError && <div className="ma-alert ma-alert-error">{cardFormError}</div>}
+                                    <label className="ma-field">
+                                        <span className="ma-label-chip ma-label-mint">FRONT</span>
+                                        <textarea
+                                            className="ma-textarea"
+                                            rows={3}
+                                            ref={frontTextareaRef}
+                                            value={frontText}
+                                            onChange={(event) => setFrontText(event.target.value)}
+                                            placeholder="Front side text"
+                                            required
+                                        />
+                                    </label>
 
-                        <form className="ma-quick-add-form" onSubmit={handleAddCard}>
-                            <label className="ma-field">
-                                <span className="ma-label-chip ma-label-blue">DECK</span>
-                                <select
-                                    className="ma-input ma-select"
-                                    value={selectedDeckId}
-                                    onChange={(event) => {
-                                        const nextDeckId = event.target.value;
-                                        setSelectedDeckId(nextDeckId);
-                                        window.localStorage.setItem(LAST_USED_DECK_KEY, nextDeckId);
-                                    }}
-                                    required
-                                >
-                                    {decks.filter(deck => deck.is_default !== 1).map((deck) => (
-                                        <option key={deck.deck_id} value={String(deck.deck_id)}>
-                                            {deck.title}
-                                        </option>
-                                    ))}
-                                </select>
-                            </label>
+                                    <label className="ma-field">
+                                        <span className="ma-label-chip ma-label-lavender">BACK</span>
+                                        <textarea
+                                            className="ma-textarea"
+                                            rows={3}
+                                            value={backText}
+                                            onChange={(event) => setBackText(event.target.value)}
+                                            placeholder="Back side text"
+                                            required
+                                        />
+                                    </label>
 
-                            <label className="ma-field">
-                                <span className="ma-label-chip ma-label-mint">FRONT</span>
-                                <textarea
-                                    className="ma-textarea"
-                                    rows={3}
-                                    ref={frontTextareaRef}
-                                    value={frontText}
-                                    onChange={(event) => setFrontText(event.target.value)}
-                                    placeholder="Front side text"
-                                    required
-                                />
-                            </label>
-
-                            <label className="ma-field">
-                                <span className="ma-label-chip ma-label-lavender">BACK</span>
-                                <textarea
-                                    className="ma-textarea"
-                                    rows={3}
-                                    value={backText}
-                                    onChange={(event) => setBackText(event.target.value)}
-                                    placeholder="Back side text"
-                                    required
-                                />
-                            </label>
-
-                            <div className="ma-actions">
-                                <button type="button" className="ma-btn ma-btn-secondary" onClick={closeAddCardModal}>
-                                    Cancel
-                                </button>
-                                <button
-                                    type="button"
-                                    className="ma-btn ma-btn-secondary"
-                                    onClick={handleAddAnotherCard}
-                                    disabled={creatingCard}
-                                >
-                                    {creatingCard ? 'Adding...' : 'Add + Next'}
-                                </button>
-                                <button type="submit" className="ma-btn ma-btn-primary" disabled={creatingCard}>
-                                    {creatingCard ? 'Adding...' : 'Add Flashcard'}
-                                </button>
-                            </div>
-                        </form>
+                                    <div className="ma-actions">
+                                        <button type="button" className="ma-btn ma-btn-secondary" onClick={closeAddCardModal}>
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="ma-btn ma-btn-secondary"
+                                            onClick={handleAddAnotherCard}
+                                            disabled={creatingCard}
+                                        >
+                                            {creatingCard ? 'Adding...' : 'Add + Next'}
+                                        </button>
+                                        <button type="submit" className="ma-btn ma-btn-primary" disabled={creatingCard}>
+                                            {creatingCard ? 'Adding...' : 'Add Flashcard'}
+                                        </button>
+                                    </div>
+                                </form>
+                            </>
+                        )}
                     </div>
                 </div>
             )}
