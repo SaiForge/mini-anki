@@ -2,7 +2,7 @@
 import { useState, useContext, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import axiosClient from '../api/axiosClient';
+import { axiosClient } from '../api/axiosClient';
 
 export default function Login() {
     const navigate = useNavigate();
