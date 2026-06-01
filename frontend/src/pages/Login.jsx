@@ -112,8 +112,7 @@ export default function Login() {
 
         try {
             const response = await axiosClient.post('/api/auth/resend-verification', {
-                email: verificationEmail,
-                password: '' // Dummy password for the schema
+                email: verificationEmail
             });
             setModalNotice(response.data.message);
             setResendCooldown(60);
@@ -131,8 +130,7 @@ export default function Login() {
 
         try {
             const response = await axiosClient.post('/api/auth/forgot-password', {
-                email: forgotEmail,
-                password: '' // Dummy password for the schema
+                email: forgotEmail
             });
             setModalNotice(response.data.message);
             // Reset the form after successful request

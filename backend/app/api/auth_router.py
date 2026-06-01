@@ -4,7 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.all_models import User
-from app.schemas.user_schema import UserCreate, UserResponse, Token, MessageResponse
+from app.schemas.user_schema import (
+    UserCreate,
+    UserResponse,
+    Token,
+    MessageResponse,
+    UserEmailRequest,
+    ResetPasswordRequest,
+)
 from app.core.security import (
     get_password_hash,
     verify_password,
@@ -176,9 +183,9 @@ def verify_email(token: str, db: Session = Depends(get_db)):
 
 
 @router.post("/resend-verification", response_model=MessageResponse)
-def resend_verification_email(user: UserCreate, db: Session = Depends(get_db)):
+def resend_verification_email(request: UserEmailRequest, db: Session = Depends(get_db)):
     """Resend verification email for unverified users."""
-    db_user = db.query(User).filter(User.email == user.email).first()
+    db_user = db.query(User).filter(User.email == request.email).first()
     
     if not db_user:
         raise HTTPException(
@@ -202,9 +209,9 @@ def resend_verification_email(user: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/forgot-password", response_model=MessageResponse)
-def forgot_password(user: UserCreate, db: Session = Depends(get_db)):
+def forgot_password(request: UserEmailRequest, db: Session = Depends(get_db)):
     """Request password reset email."""
-    db_user = db.query(User).filter(User.email == user.email).first()
+    db_user = db.query(User).filter(User.email == request.email).first()
     
     if not db_user:
         # Don't reveal if user exists or not for security
@@ -220,10 +227,10 @@ def forgot_password(user: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/reset-password", response_model=MessageResponse)
-def reset_password(token: str, new_password: str, db: Session = Depends(get_db)):
+def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
     """Reset password with token."""
     try:
-        email = decode_password_reset_token(token)
+        email = decode_password_reset_token(request.token)
     except ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -242,13 +249,13 @@ def reset_password(token: str, new_password: str, db: Session = Depends(get_db))
             detail="User not found.",
         )
     
-    if len(new_password) < 8:
+    if len(request.new_password) < 8:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Password must be at least 8 characters.",
         )
     
-    db_user.password_hash = get_password_hash(new_password)
+    db_user.password_hash = get_password_hash(request.new_password)
     db.commit()
     
     return {"message": "Password successfully reset. You can now log in."}

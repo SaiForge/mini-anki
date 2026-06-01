@@ -11,6 +11,15 @@ class UserCreate(BaseModel):
     password: str = Field(..., min_length=8, max_length=72)
 
 
+class UserEmailRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(..., min_length=8, max_length=72)
+
+
 # What we send back to the user (Notice we DO NOT send the password_hash!)
 class UserResponse(BaseModel):
     user_id: UUID
