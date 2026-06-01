@@ -4,9 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "build": "vite build",
-    "lint": "eslint .",
+    "dev": "vite",
+    "build": "vite build && echo \"/api/* $SECRET_API_URL/api/:splat 200!\" > dist/_redirects && echo \"/* /index.html 200\" >> dist/_redirects",
     "preview": "vite preview"
   },
   "dependencies": {
