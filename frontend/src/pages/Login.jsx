@@ -6,14 +6,44 @@ import { AuthContext } from '../context/AuthContext';
 export default function Login() {
     const navigate = useNavigate();
     const { login, register } = useContext(AuthContext);
+    const minPasswordLength = 8;
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
 
+    const normalizeErrorMessage = (err) => {
+        const detail = err?.response?.data?.detail;
+
+        if (Array.isArray(detail)) {
+            const messages = detail
+                .map((item) => (typeof item?.msg === 'string' ? item.msg : null))
+                .filter(Boolean);
+            if (messages.length > 0) {
+                return messages.join(' ');
+            }
+        }
+
+        if (typeof detail === 'string' && detail.trim()) {
+            return detail;
+        }
+
+        if (typeof err?.message === 'string' && err.message.trim()) {
+            return err.message;
+        }
+
+        return 'An error occurred. Try again!';
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
+
+        if (password.length < minPasswordLength) {
+            setError(`Password must be at least ${minPasswordLength} characters.`);
+            return;
+        }
+
         try {
             if (isLogin) {
                 await login(email, password);
@@ -23,7 +53,7 @@ export default function Login() {
             // Navigate to dashboard after successful login/registration
             navigate('/dashboard');
         } catch (err) {
-            setError(err.response?.data?.detail || 'An error occurred. Try again!');
+            setError(normalizeErrorMessage(err));
         }
     };
 

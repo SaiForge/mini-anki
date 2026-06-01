@@ -21,4 +21,4 @@ COPY . .
 EXPOSE 8000
 
 # Run Uvicorn. We bind to 0.0.0.0 so it is accessible outside the container.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

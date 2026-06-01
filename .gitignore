@@ -41,3 +41,4 @@ frontend/.vite/
 .idea/
 
 ANKI_INTERVIEW_FLASHCARDS.md
+.env
