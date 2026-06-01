@@ -5,6 +5,7 @@ from app.db.database import engine
 from app.models import all_models
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 # This creates the tables in PostgreSQL if they don't exist yet
 all_models.Base.metadata.create_all(bind=engine)
@@ -33,6 +34,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def migrate_database_schema():
+    print("Running database schema check...")
+    with engine.connect() as connection:
+        try:
+            connection.execute(text("ALTER TABLE users ADD COLUMN is_verified BOOLEAN DEFAULT FALSE;"))
+            connection.commit()
+            print("Successfully added 'is_verified' column to users table!")
+        except Exception as e:
+            print(f"Schema update notice (Normal if column exists): {e}")
+
 
 app.include_router(auth_router.router)
 app.include_router(deck_router.router)

@@ -1,10 +1,12 @@
 // frontend/src/pages/Login.jsx
-import { useState, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useContext, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import axiosClient from '../api/axiosClient';
 
 export default function Login() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const { login, register } = useContext(AuthContext);
     const minPasswordLength = 8;
     const [isLogin, setIsLogin] = useState(true);
@@ -12,6 +14,40 @@ export default function Login() {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
+
+    // Modals and states
+    const [showVerificationModal, setShowVerificationModal] = useState(false);
+    const [verificationEmail, setVerificationEmail] = useState('');
+    const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
+    const [forgotEmail, setForgotEmail] = useState('');
+    const [resendCooldown, setResendCooldown] = useState(0);
+    const [resetStage, setResetStage] = useState('request'); // 'request' or 'reset'
+    const [resetToken, setResetToken] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [modalError, setModalError] = useState('');
+    const [modalNotice, setModalNotice] = useState('');
+    const [isSubmittingModal, setIsSubmittingModal] = useState(false);
+
+    // Check for reset token in URL parameters
+    useEffect(() => {
+        const token = searchParams.get('token');
+        if (token) {
+            setShowForgotPasswordModal(true);
+            setResetStage('reset');
+            setResetToken(token);
+            // Clean up URL
+            navigate('/login', { replace: true });
+        }
+    }, [searchParams, navigate]);
+
+    // Cooldown timer for resend button
+    useEffect(() => {
+        if (resendCooldown > 0) {
+            const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
+            return () => clearTimeout(timer);
+        }
+    }, [resendCooldown]);
 
     const normalizeErrorMessage = (err) => {
         const detail = err?.response?.data?.detail;
@@ -58,8 +94,99 @@ export default function Login() {
             setNotice(response?.message || 'Check your email to verify your account.');
             setIsLogin(true);
         } catch (err) {
-            setError(normalizeErrorMessage(err));
+            const errMsg = normalizeErrorMessage(err);
+            setError(errMsg);
+            
+            // Show verification modal if email not verified
+            if (errMsg === 'Email not verified. Check your inbox.') {
+                setVerificationEmail(email);
+                setShowVerificationModal(true);
+            }
         }
+    };
+
+    const handleResendVerification = async () => {
+        setModalError('');
+        setModalNotice('');
+        setIsSubmittingModal(true);
+
+        try {
+            const response = await axiosClient.post('/auth/resend-verification', {
+                email: verificationEmail,
+                password: '' // Dummy password for the schema
+            });
+            setModalNotice(response.data.message);
+            setResendCooldown(60);
+        } catch (err) {
+            setModalError(normalizeErrorMessage(err));
+        } finally {
+            setIsSubmittingModal(false);
+        }
+    };
+
+    const handleForgotPasswordRequest = async () => {
+        setModalError('');
+        setModalNotice('');
+        setIsSubmittingModal(true);
+
+        try {
+            const response = await axiosClient.post('/auth/forgot-password', {
+                email: forgotEmail,
+                password: '' // Dummy password for the schema
+            });
+            setModalNotice(response.data.message);
+            // Reset the form after successful request
+            setTimeout(() => {
+                setShowForgotPasswordModal(false);
+                setForgotEmail('');
+                setResetStage('request');
+            }, 2000);
+        } catch (err) {
+            setModalError(normalizeErrorMessage(err));
+        } finally {
+            setIsSubmittingModal(false);
+        }
+    };
+
+    const handleResetPassword = async () => {
+        setModalError('');
+        
+        if (newPassword.length < minPasswordLength) {
+            setModalError(`Password must be at least ${minPasswordLength} characters.`);
+            return;
+        }
+
+        if (newPassword !== confirmPassword) {
+            setModalError('Passwords do not match.');
+            return;
+        }
+
+        setIsSubmittingModal(true);
+
+        try {
+            const response = await axiosClient.post('/auth/reset-password', {
+                token: resetToken,
+                new_password: newPassword
+            });
+            setModalNotice(response.data.message);
+            setTimeout(() => {
+                setShowForgotPasswordModal(false);
+                setResetStage('request');
+                setNewPassword('');
+                setConfirmPassword('');
+                setResetToken('');
+            }, 2000);
+        } catch (err) {
+            setModalError(normalizeErrorMessage(err));
+        } finally {
+            setIsSubmittingModal(false);
+        }
+    };
+
+    const openForgotPasswordFromVerification = () => {
+        setShowVerificationModal(false);
+        setShowForgotPasswordModal(true);
+        setForgotEmail(verificationEmail);
     };
 
     return (
@@ -129,7 +256,21 @@ export default function Login() {
                             />
                         </label>
 
-                        {isLogin && <button type="button" className="ma-login-forgot">Forgot password?</button>}
+                        {isLogin && (
+                            <button 
+                                type="button" 
+                                className="ma-login-forgot"
+                                onClick={() => {
+                                    setShowForgotPasswordModal(true);
+                                    setResetStage('request');
+                                    setForgotEmail('');
+                                    setModalError('');
+                                    setModalNotice('');
+                                }}
+                            >
+                                Forgot password?
+                            </button>
+                        )}
 
                         <button type="submit" className="ma-login-submit">
                             {isLogin ? "Let's Study!" : 'Create Account'}
@@ -153,6 +294,128 @@ export default function Login() {
                     </button>
                 </p>
             </main>
+
+            {/* Email Verification Modal */}
+            {showVerificationModal && (
+                <div className="ma-modal-overlay" onClick={() => setShowVerificationModal(false)}>
+                    <div className="ma-modal" onClick={(e) => e.stopPropagation()}>
+                        <div className="ma-modal-header">
+                            <h2>Verify Your Email</h2>
+                            <button
+                                type="button"
+                                className="ma-modal-close"
+                                onClick={() => setShowVerificationModal(false)}
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="ma-modal-body">
+                            <p>We sent a verification link to <strong>{verificationEmail}</strong>. Check your inbox to verify your account.</p>
+                            {modalError && <div className="ma-alert ma-alert-error">{modalError}</div>}
+                            {modalNotice && <div className="ma-alert ma-alert-success">{modalNotice}</div>}
+                        </div>
+                        <div className="ma-modal-actions">
+                            <button
+                                type="button"
+                                className="ma-btn ma-btn-primary"
+                                onClick={handleResendVerification}
+                                disabled={resendCooldown > 0 || isSubmittingModal}
+                            >
+                                {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Verification Email'}
+                            </button>
+                            <button
+                                type="button"
+                                className="ma-btn ma-btn-secondary"
+                                onClick={openForgotPasswordFromVerification}
+                            >
+                                Forgot Password?
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Forgot Password Modal */}
+            {showForgotPasswordModal && (
+                <div className="ma-modal-overlay" onClick={() => setShowForgotPasswordModal(false)}>
+                    <div className="ma-modal" onClick={(e) => e.stopPropagation()}>
+                        <div className="ma-modal-header">
+                            <h2>{resetStage === 'request' ? 'Reset Password' : 'Create New Password'}</h2>
+                            <button
+                                type="button"
+                                className="ma-modal-close"
+                                onClick={() => setShowForgotPasswordModal(false)}
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="ma-modal-body">
+                            {resetStage === 'request' ? (
+                                <>
+                                    <p>Enter your email address and we'll send you a link to reset your password.</p>
+                                    {modalError && <div className="ma-alert ma-alert-error">{modalError}</div>}
+                                    {modalNotice && <div className="ma-alert ma-alert-success">{modalNotice}</div>}
+                                    <input
+                                        type="email"
+                                        placeholder="Enter your email"
+                                        value={forgotEmail}
+                                        onChange={(e) => setForgotEmail(e.target.value)}
+                                        className="ma-login-input"
+                                    />
+                                </>
+                            ) : (
+                                <>
+                                    <p>Enter and confirm your new password.</p>
+                                    {modalError && <div className="ma-alert ma-alert-error">{modalError}</div>}
+                                    {modalNotice && <div className="ma-alert ma-alert-success">{modalNotice}</div>}
+                                    <input
+                                        type="password"
+                                        placeholder="New password"
+                                        value={newPassword}
+                                        onChange={(e) => setNewPassword(e.target.value)}
+                                        className="ma-login-input"
+                                    />
+                                    <input
+                                        type="password"
+                                        placeholder="Confirm password"
+                                        value={confirmPassword}
+                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                        className="ma-login-input"
+                                    />
+                                </>
+                            )}
+                        </div>
+                        <div className="ma-modal-actions">
+                            {resetStage === 'request' ? (
+                                <button
+                                    type="button"
+                                    className="ma-btn ma-btn-primary"
+                                    onClick={handleForgotPasswordRequest}
+                                    disabled={!forgotEmail || isSubmittingModal}
+                                >
+                                    {isSubmittingModal ? 'Sending...' : 'Send Reset Link'}
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    className="ma-btn ma-btn-primary"
+                                    onClick={handleResetPassword}
+                                    disabled={!newPassword || !confirmPassword || isSubmittingModal}
+                                >
+                                    {isSubmittingModal ? 'Resetting...' : 'Reset Password'}
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                className="ma-btn ma-btn-secondary"
+                                onClick={() => setShowForgotPasswordModal(false)}
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

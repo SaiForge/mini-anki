@@ -47,3 +47,19 @@ def decode_email_verification_token(token: str) -> str:
     if not email:
         raise ValueError("Token missing subject")
     return email
+
+
+def create_password_reset_token(email: str) -> str:
+    expire = datetime.utcnow() + timedelta(hours=1)  # 1 hour for password reset
+    to_encode = {"sub": email, "exp": expire, "type": "password_reset"}
+    return jwt.encode(to_encode, EMAIL_VERIFICATION_SECRET, algorithm=ALGORITHM)
+
+
+def decode_password_reset_token(token: str) -> str:
+    payload = jwt.decode(token, EMAIL_VERIFICATION_SECRET, algorithms=[ALGORITHM])
+    if payload.get("type") != "password_reset":
+        raise ValueError("Invalid token type")
+    email = payload.get("sub")
+    if not email:
+        raise ValueError("Token missing subject")
+    return email
