@@ -111,7 +111,7 @@ export default function Login() {
         setIsSubmittingModal(true);
 
         try {
-            const response = await axiosClient.post('/auth/resend-verification', {
+            const response = await axiosClient.post('/api/auth/resend-verification', {
                 email: verificationEmail,
                 password: '' // Dummy password for the schema
             });
@@ -130,7 +130,7 @@ export default function Login() {
         setIsSubmittingModal(true);
 
         try {
-            const response = await axiosClient.post('/auth/forgot-password', {
+            const response = await axiosClient.post('/api/auth/forgot-password', {
                 email: forgotEmail,
                 password: '' // Dummy password for the schema
             });
@@ -164,7 +164,7 @@ export default function Login() {
         setIsSubmittingModal(true);
 
         try {
-            const response = await axiosClient.post('/auth/reset-password', {
+            const response = await axiosClient.post('/api/auth/reset-password', {
                 token: resetToken,
                 new_password: newPassword
             });
