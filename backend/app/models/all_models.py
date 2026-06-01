@@ -1,5 +1,5 @@
 # app/models/all_models.py
-from sqlalchemy import Column, String, Integer, Date, DateTime, ForeignKey, Text
+from sqlalchemy import Column, String, Integer, Date, DateTime, ForeignKey, Text, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid
@@ -13,6 +13,7 @@ class User(Base):
     user_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String(255), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
+    is_verified = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Streak tracking

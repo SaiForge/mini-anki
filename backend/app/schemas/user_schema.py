@@ -16,6 +16,7 @@ class UserResponse(BaseModel):
     user_id: UUID
     email: EmailStr
     created_at: datetime
+    is_verified: bool
     current_streak: int
     last_review_date: Optional[date]
 
@@ -27,3 +28,7 @@ class UserResponse(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+
+class MessageResponse(BaseModel):
+    message: str

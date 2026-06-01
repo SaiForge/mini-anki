@@ -11,6 +11,7 @@ export default function Login() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [notice, setNotice] = useState('');
 
     const normalizeErrorMessage = (err) => {
         const detail = err?.response?.data?.detail;
@@ -38,6 +39,7 @@ export default function Login() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
+        setNotice('');
 
         if (password.length < minPasswordLength) {
             setError(`Password must be at least ${minPasswordLength} characters.`);
@@ -47,11 +49,14 @@ export default function Login() {
         try {
             if (isLogin) {
                 await login(email, password);
-            } else {
-                await register(email, password);
+                // Navigate to dashboard after successful login
+                navigate('/dashboard');
+                return;
             }
-            // Navigate to dashboard after successful login/registration
-            navigate('/dashboard');
+
+            const response = await register(email, password);
+            setNotice(response?.message || 'Check your email to verify your account.');
+            setIsLogin(true);
         } catch (err) {
             setError(normalizeErrorMessage(err));
         }
@@ -75,19 +80,28 @@ export default function Login() {
                         <button
                             type="button"
                             className={`ma-login-toggle-btn ${isLogin ? 'is-active' : ''}`}
-                            onClick={() => setIsLogin(true)}
+                            onClick={() => {
+                                setIsLogin(true);
+                                setError('');
+                                setNotice('');
+                            }}
                         >
                             Login
                         </button>
                         <button
                             type="button"
                             className={`ma-login-toggle-btn ${!isLogin ? 'is-active' : ''}`}
-                            onClick={() => setIsLogin(false)}
+                            onClick={() => {
+                                setIsLogin(false);
+                                setError('');
+                                setNotice('');
+                            }}
                         >
                             Sign Up
                         </button>
                     </div>
 
+                    {notice && <div className="ma-alert ma-alert-success">{notice}</div>}
                     {error && <div className="ma-alert ma-alert-error">{error}</div>}
 
                     <form onSubmit={handleSubmit} className="ma-login-form">
@@ -126,7 +140,15 @@ export default function Login() {
 
                 <p className="ma-login-footer">
                     {isLogin ? 'New here? ' : 'Already have an account? '}
-                    <button type="button" onClick={() => setIsLogin(!isLogin)} className="ma-login-footer-link">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setIsLogin(!isLogin);
+                            setError('');
+                            setNotice('');
+                        }}
+                        className="ma-login-footer-link"
+                    >
                         {isLogin ? 'Create a free account' : 'Switch to login'}
                     </button>
                 </p>

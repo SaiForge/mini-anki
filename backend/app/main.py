@@ -20,16 +20,17 @@ app = FastAPI(
 
 # CORS Configuration (Crucial so our React frontend can talk to it)
 origins = [
-    "http://localhost:5173",  # Standard Vite/React port
-    "http://127.0.0.1:5173",
-    "*",
+    "http://localhost:5173",  # Your local Vite frontend
+    "http://localhost:3000",  # Just in case you use React standard port
+    "https://minianki.netlify.app",  # Your LIVE Production Frontend
 ]
 
+# Attach the security bypass
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=origins,  # This locks down the API to only the list above
     allow_credentials=True,
-    allow_methods=["*"],  # Allow POST, GET, PUT, DELETE
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
