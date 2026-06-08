@@ -1,8 +1,8 @@
-# Mini Anki
+# Mini-Anki
 
-An end-to-end spaced repetition flashcard app built with FastAPI, PostgreSQL, and React.
+A full-stack spaced repetition flashcard app built with FastAPI, PostgreSQL, and React.
 
-Create decks, add flashcards, and run focused study sessions with graded recall (**Again · Hard · Good · Easy**) that automatically schedules your next review. Streak tracking keeps you accountable, and email verification keeps your account secure.
+Create decks, add flashcards, and run focused study sessions with graded recall (**Again · Hard · Good · Easy**) that automatically schedules your next review using a built-in SRS engine. Streak tracking keeps you accountable, dark mode keeps your eyes comfortable at night, and email verification keeps your account secure.
 
 ## Live Demo
 
@@ -18,17 +18,19 @@ Create decks, add flashcards, and run focused study sessions with graded recall 
 - **Email verification** via AWS SES (verification link sent on signup)
 - **Password reset flow** — forgot-password email with time-limited token
 - **Multi-user isolation** — each user only sees their own decks and cards
-- **Default deck** — auto-created `📚 Today's Review` deck aggregates all due cards
-- **Spaced repetition engine** — interval scheduling with four grade levels
-- **Streak tracking** — daily check-in & review completion streaks
+- **Default deck** — auto-created `📚 Today's Review` deck aggregates all due cards across all decks
+- **Spaced repetition engine** — interval scheduling with four grade levels (Again · Hard · Good · Easy)
+- **Streak tracking** — increments only when all due cards are completed; resets if a day is missed
+- **Dark mode** — persistent light/dark toggle stored in browser, easy on the eyes at night
+- **Browser-side caching** — deck list and profile are cached in memory; navigating away and back makes zero redundant API calls
 - **Review history** — every grade is logged for future analytics
-- **Dockerized full stack** for quick local startup
+- **Dockerized full stack** — single `docker compose up --build` for local startup
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | React 19, React Router 7, Axios, Lucide Icons, date-fns, Vite 8 |
+| Frontend | React 19, React Router 7, Axios, Lucide Icons, Vite 8 |
 | Backend | FastAPI, SQLAlchemy 2, Pydantic 2, Uvicorn |
 | Database | PostgreSQL (AWS RDS in production) |
 | Auth | JWT (python-jose), bcrypt / passlib |
@@ -76,15 +78,21 @@ mini-anki/
     ├── package.json
     └── src/
         ├── App.jsx            # Routes + ProtectedRoute wrapper
-        ├── App.css            # Global styles
-        ├── api/               # Axios client + API helpers
-        ├── context/           # AuthContext (JWT + user state)
+        ├── App.css            # Global styles (light + dark themes)
+        ├── api/               # Axios client with JWT interceptor
+        ├── components/
+        │   └── ThemeToggle.jsx# Moon/Sun icon button for dark mode
+        ├── context/
+        │   ├── AuthContext.jsx # JWT auth state
+        │   ├── DataContext.jsx # Cached deck list + profile across routes
+        │   └── ThemeContext.jsx# Dark/light mode, persisted to localStorage
         └── pages/
-            ├── Login.jsx      # Login / register with email verification
-            ├── Dashboard.jsx  # Deck list, card management, streaks
+            ├── Login.jsx        # Login / register with email verification
+            ├── Dashboard.jsx    # Deck grid, add card modal, streak display
             ├── StudySession.jsx # Flip-card review + grading
-            ├── DeckEditor.jsx # Create new deck
-            └── VerifyEmail.jsx# Email verification landing page
+            ├── DeckEditor.jsx   # Create new deck
+            ├── VerifyEmail.jsx  # Email verification landing page
+            └── ResetPassword.jsx# Password reset form
 ```
 
 ## Quick Start (Docker)
@@ -92,7 +100,7 @@ mini-anki/
 ### 1) Clone and configure
 
 ```bash
-git clone https://github.com/<your-org>/mini-anki.git
+git clone https://github.com/SaiForge/mini-anki.git
 cd mini-anki
 cp .env.example .env   # or create .env with the variables below
 ```
@@ -119,12 +127,6 @@ docker compose down -v     # stop + remove database volume
 ```
 
 ## Local Development (No Docker)
-
-You can run PostgreSQL in Docker while running the app natively:
-
-```bash
-docker compose up -d db   # if you have a db service defined
-```
 
 ### Backend
 
@@ -157,14 +159,15 @@ Open http://localhost:5173.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `DATABASE_URL` | Yes | `postgresql://postgres:password@localhost:5432/minianki` | SQLAlchemy connection string |
-| `SECRET_KEY` | Yes | `super-secret-jwt-key-change-me-later` | JWT signing secret |
+| `DATABASE_URL` | Yes | — | SQLAlchemy PostgreSQL connection string |
+| `SECRET_KEY` | Yes | — | JWT signing secret (use a strong random value) |
+| `FRONTEND_BASE_URL` | Yes | — | Frontend origin used in email links (e.g. `https://minianki.netlify.app`) |
 
 ### Frontend
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `VITE_API_URL` | No | `http://localhost:8000` | Base URL for backend API |
+| `VITE_API_URL` | No | `''` (same host) | Base URL for backend API |
 
 ### AWS (for email features)
 
@@ -185,7 +188,7 @@ Base URL: `http://localhost:8000`
 |---|---|---|---|
 | POST | `/api/auth/register` | No | Create account (sends verification email) |
 | POST | `/api/auth/login` | No | Get JWT token (requires verified email) |
-| GET | `/api/auth/me` | Yes | Get current user profile |
+| GET | `/api/auth/me` | Yes | Get current user profile and streak |
 | GET | `/api/auth/verify?token=…` | No | Verify email address |
 | POST | `/api/auth/resend-verification` | No | Resend verification email |
 | POST | `/api/auth/forgot-password` | No | Request password reset email |
@@ -204,9 +207,9 @@ Base URL: `http://localhost:8000`
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| GET | `/api/study/{deck_id}/due` | Yes | Get due cards (default deck returns all due) |
+| GET | `/api/study/{deck_id}/due` | Yes | Get due cards (default deck aggregates all due) |
 | POST | `/api/study/grade` | Yes | Submit grade and reschedule card |
-| POST | `/api/study/{deck_id}/check-in` | Yes | Daily check-in for streak (default deck only) |
+| POST | `/api/study/{deck_id}/check-in` | Yes | Daily check-in — updates streak only when no cards are due |
 
 ### Utility
 
@@ -221,7 +224,7 @@ The current interval in days is transformed based on the grade:
 
 | Grade | New Interval | Minimum |
 |---|---|---|
-| Again | `0` days (review immediately) | — |
+| Again | `0` days (review immediately in the same session) | — |
 | Hard | `current_interval × 1` | 1 day |
 | Good | `current_interval × 2` | 3 days |
 | Easy | `current_interval × 3` | 7 days |
@@ -232,9 +235,21 @@ next_review_date = today + new_interval_days
 
 ## Streak System
 
-- A **daily streak** tracks consecutive days of engagement.
-- The streak increments when you **complete all due cards** in the default deck, or manually **check in** if there are no cards due.
+- The streak tracks **consecutive days of completed reviews**.
+- It increments only when **all due cards are cleared** for the day — either by grading the last card or by checking in when there are no cards due.
+- Simply opening a study session **does not** increment the streak.
 - Missing a day resets the streak to 1 on your next review.
+
+## Caching Strategy
+
+The frontend uses a **`DataContext`** that lives above all routes and caches decks and user profile in memory for the entire session:
+
+| Data | Cached | Reason |
+|---|---|---|
+| Deck list | ✅ Yes | Mutations update cache in-place; no refetch needed on navigation |
+| User profile / streak | ✅ Yes | Refreshed after a study session check-in |
+| Due cards | ❌ No | Time-sensitive SRS data; always fetched fresh |
+| Card grades | ❌ No | Write-only operations |
 
 ## Data Model
 
@@ -281,23 +296,23 @@ erDiagram
 
 ## Typical User Flow
 
-1. **Register** — enter email and password; a verification link is sent.
+1. **Register** — enter email and password; a verification link is sent via AWS SES.
 2. **Verify** — click the link in your inbox to activate the account.
-3. **Login** — authenticate and receive a JWT.
-4. **Create a deck** — organize cards by topic.
-5. **Add cards** — write front/back flashcards.
-6. **Study** — open `📚 Today's Review` to see all due cards across decks.
+3. **Login** — authenticate and receive a JWT stored in `localStorage`.
+4. **Create a deck** — organize cards by topic (e.g. "Japanese Vocab N5").
+5. **Add cards** — write front/back flashcards from the Dashboard modal.
+6. **Study** — open `📚 Today's Review` to see all due cards across every deck.
 7. **Grade** — flip each card and submit **Again / Hard / Good / Easy**.
-8. **Streak** — complete all due cards (or check in) daily to build your streak.
+8. **Streak** — complete all due cards daily to build your streak; toggle dark mode for night sessions.
 
 ## Frontend Scripts
 
 Run from the `frontend/` directory:
 
 ```bash
-npm run dev       # Vite dev server
+npm run dev       # Vite dev server (HMR)
 npm run build     # Production build (includes Netlify _redirects)
-npm run preview   # Preview production build
+npm run preview   # Preview production build locally
 ```
 
 ## Deployment
@@ -316,15 +331,15 @@ docker compose up --build -d backend
 
 ### Database — AWS RDS
 
-PostgreSQL instance managed via RDS. Connection string is set in `DATABASE_URL`.
+PostgreSQL instance managed via RDS. Connection string is passed via `DATABASE_URL` environment variable.
 
 ## Troubleshooting
 
 ### Backend cannot connect to database
 
-- Verify PostgreSQL is running and reachable.
-- Check `DATABASE_URL` credentials and host.
-- If using Docker for DB, ensure port 5432 is available.
+- Verify PostgreSQL is running and reachable at the host in `DATABASE_URL`.
+- Check credentials and port (default 5432).
+- If using Docker, ensure port 5432 is not already in use.
 
 ### CORS errors in browser
 
@@ -335,13 +350,13 @@ PostgreSQL instance managed via RDS. Connection string is set in `DATABASE_URL`.
 
 - Check your spam/junk folder.
 - Ensure the sender email is verified in AWS SES.
-- If SES is in sandbox mode, the recipient must also be verified.
+- If SES is in sandbox mode, the recipient must also be a verified address.
 
 ### Unauthorized (401) errors after login
 
-- Confirm `access_token` exists in localStorage.
+- Confirm `access_token` exists in `localStorage`.
 - Confirm requests include `Authorization: Bearer <token>`.
-- Try logging out and in again to refresh the token.
+- Try logging out and back in to refresh the token.
 
 ### Port already in use
 
@@ -350,20 +365,20 @@ PostgreSQL instance managed via RDS. Connection string is set in `DATABASE_URL`.
 
 ## Security Notes
 
-- Replace the default `SECRET_KEY` in all non-local environments.
-- Do not commit `.env` or secrets to version control.
+- Replace the default `SECRET_KEY` with a strong random value in all non-local environments.
+- Do not commit `.env` files or secrets to version control.
 - Use HTTPS and secure cookie/token handling in production.
 - Password reset tokens expire in 1 hour.
-- Email verification is required before login is allowed.
+- Email verification is required before login is permitted.
 
 ## Future Improvements
 
 - Add database migrations with Alembic.
 - Add backend and frontend automated tests.
-- Add card editing and deck statistics/analytics.
+- Add card editing and deck statistics / analytics dashboard from `ReviewLog` data.
 - Add refresh token flow and stricter auth hardening.
 - Add rate limiting on auth endpoints.
-- Build review analytics dashboard from `ReviewLog` data.
+- Support image/audio cards.
 
 ## License
 
