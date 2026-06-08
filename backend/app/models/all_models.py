@@ -1,5 +1,6 @@
 # app/models/all_models.py
 from sqlalchemy import Column, String, Integer, Date, DateTime, ForeignKey, Text, Boolean
+# pyrefly: ignore [missing-import]
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid

@@ -1,12 +1,11 @@
 // frontend/src/pages/Login.jsx
 import { useState, useContext, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { axiosClient } from '../api/axiosClient';
 
 export default function Login() {
     const navigate = useNavigate();
-    const [searchParams] = useSearchParams();
     const { login, register } = useContext(AuthContext);
     const minPasswordLength = 8;
     const [isLogin, setIsLogin] = useState(true);
@@ -21,25 +20,11 @@ export default function Login() {
     const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
     const [forgotEmail, setForgotEmail] = useState('');
     const [resendCooldown, setResendCooldown] = useState(0);
-    const [resetStage, setResetStage] = useState('request'); // 'request' or 'reset'
-    const [resetToken, setResetToken] = useState('');
-    const [newPassword, setNewPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
     const [modalError, setModalError] = useState('');
     const [modalNotice, setModalNotice] = useState('');
     const [isSubmittingModal, setIsSubmittingModal] = useState(false);
 
-    // Check for reset token in URL parameters
-    useEffect(() => {
-        const token = searchParams.get('token');
-        if (token) {
-            setShowForgotPasswordModal(true);
-            setResetStage('reset');
-            setResetToken(token);
-            // Clean up URL
-            navigate('/login', { replace: true });
-        }
-    }, [searchParams, navigate]);
+
 
     // Cooldown timer for resend button
     useEffect(() => {
@@ -137,42 +122,6 @@ export default function Login() {
             setTimeout(() => {
                 setShowForgotPasswordModal(false);
                 setForgotEmail('');
-                setResetStage('request');
-            }, 2000);
-        } catch (err) {
-            setModalError(normalizeErrorMessage(err));
-        } finally {
-            setIsSubmittingModal(false);
-        }
-    };
-
-    const handleResetPassword = async () => {
-        setModalError('');
-        
-        if (newPassword.length < minPasswordLength) {
-            setModalError(`Password must be at least ${minPasswordLength} characters.`);
-            return;
-        }
-
-        if (newPassword !== confirmPassword) {
-            setModalError('Passwords do not match.');
-            return;
-        }
-
-        setIsSubmittingModal(true);
-
-        try {
-            const response = await axiosClient.post('/api/auth/reset-password', {
-                token: resetToken,
-                new_password: newPassword
-            });
-            setModalNotice(response.data.message);
-            setTimeout(() => {
-                setShowForgotPasswordModal(false);
-                setResetStage('request');
-                setNewPassword('');
-                setConfirmPassword('');
-                setResetToken('');
             }, 2000);
         } catch (err) {
             setModalError(normalizeErrorMessage(err));
@@ -260,7 +209,6 @@ export default function Login() {
                                 className="ma-login-forgot"
                                 onClick={() => {
                                     setShowForgotPasswordModal(true);
-                                    setResetStage('request');
                                     setForgotEmail('');
                                     setModalError('');
                                     setModalNotice('');
@@ -338,7 +286,7 @@ export default function Login() {
                 <div className="ma-modal-overlay" onClick={() => setShowForgotPasswordModal(false)}>
                     <div className="ma-modal" onClick={(e) => e.stopPropagation()}>
                         <div className="ma-modal-header">
-                            <h2>{resetStage === 'request' ? 'Reset Password' : 'Create New Password'}</h2>
+                            <h2>Reset Password</h2>
                             <button
                                 type="button"
                                 className="ma-modal-close"
@@ -348,61 +296,26 @@ export default function Login() {
                             </button>
                         </div>
                         <div className="ma-modal-body">
-                            {resetStage === 'request' ? (
-                                <>
-                                    <p>Enter your email address and we'll send you a link to reset your password.</p>
-                                    {modalError && <div className="ma-alert ma-alert-error">{modalError}</div>}
-                                    {modalNotice && <div className="ma-alert ma-alert-success">{modalNotice}</div>}
-                                    <input
-                                        type="email"
-                                        placeholder="Enter your email"
-                                        value={forgotEmail}
-                                        onChange={(e) => setForgotEmail(e.target.value)}
-                                        className="ma-login-input"
-                                    />
-                                </>
-                            ) : (
-                                <>
-                                    <p>Enter and confirm your new password.</p>
-                                    {modalError && <div className="ma-alert ma-alert-error">{modalError}</div>}
-                                    {modalNotice && <div className="ma-alert ma-alert-success">{modalNotice}</div>}
-                                    <input
-                                        type="password"
-                                        placeholder="New password"
-                                        value={newPassword}
-                                        onChange={(e) => setNewPassword(e.target.value)}
-                                        className="ma-login-input"
-                                    />
-                                    <input
-                                        type="password"
-                                        placeholder="Confirm password"
-                                        value={confirmPassword}
-                                        onChange={(e) => setConfirmPassword(e.target.value)}
-                                        className="ma-login-input"
-                                    />
-                                </>
-                            )}
+                            <p>Enter your email address and we'll send you a link to reset your password.</p>
+                            {modalError && <div className="ma-alert ma-alert-error">{modalError}</div>}
+                            {modalNotice && <div className="ma-alert ma-alert-success">{modalNotice}</div>}
+                            <input
+                                type="email"
+                                placeholder="Enter your email"
+                                value={forgotEmail}
+                                onChange={(e) => setForgotEmail(e.target.value)}
+                                className="ma-login-input"
+                            />
                         </div>
                         <div className="ma-modal-actions">
-                            {resetStage === 'request' ? (
-                                <button
-                                    type="button"
-                                    className="ma-btn ma-btn-primary"
-                                    onClick={handleForgotPasswordRequest}
-                                    disabled={!forgotEmail || isSubmittingModal}
-                                >
-                                    {isSubmittingModal ? 'Sending...' : 'Send Reset Link'}
-                                </button>
-                            ) : (
-                                <button
-                                    type="button"
-                                    className="ma-btn ma-btn-primary"
-                                    onClick={handleResetPassword}
-                                    disabled={!newPassword || !confirmPassword || isSubmittingModal}
-                                >
-                                    {isSubmittingModal ? 'Resetting...' : 'Reset Password'}
-                                </button>
-                            )}
+                            <button
+                                type="button"
+                                className="ma-btn ma-btn-primary"
+                                onClick={handleForgotPasswordRequest}
+                                disabled={!forgotEmail || isSubmittingModal}
+                            >
+                                {isSubmittingModal ? 'Sending...' : 'Send Reset Link'}
+                            </button>
                             <button
                                 type="button"
                                 className="ma-btn ma-btn-secondary"

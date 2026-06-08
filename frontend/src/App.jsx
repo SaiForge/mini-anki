@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import StudySession from './pages/StudySession';
 import DeckEditor from './pages/DeckEditor';
 import VerifyEmail from './pages/VerifyEmail';
+import ResetPassword from './pages/ResetPassword';
 import './App.css';
 
 // A simple component to protect private routes
@@ -26,6 +27,8 @@ function AppRoutes() {
       <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" /> : <Login />} />
 
       <Route path="/verify" element={<VerifyEmail />} />
+
+      <Route path="/reset-password" element={<ResetPassword />} />
 
       <Route path="/dashboard" element={
         <ProtectedRoute>

@@ -1,4 +1,4 @@
-# app/api/auth_router.py
+import os
 import boto3
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -30,7 +30,7 @@ router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
 AWS_REGION = "us-east-2"
 SES_SENDER_EMAIL = "noreply@hirechance.in"
-FRONTEND_BASE_URL = "https://minianki.netlify.app"
+FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "https://minianki.netlify.app")
 
 ses_client = boto3.client("ses", region_name=AWS_REGION)
 
