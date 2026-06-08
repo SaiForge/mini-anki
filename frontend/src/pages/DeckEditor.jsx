@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { axiosClient } from '../api/axiosClient';
+import { DataContext } from '../context/DataContext';
 
 export default function DeckEditor() {
     const navigate = useNavigate();
+    const { addDeck } = useContext(DataContext);
 
     const [title, setTitle] = useState('');
     const [creating, setCreating] = useState(false);
@@ -24,7 +25,7 @@ export default function DeckEditor() {
         setError('');
 
         try {
-            await axiosClient.post('/api/decks/', { title });
+            await addDeck(title);
 
             navigate('/dashboard');
         } catch (err) {

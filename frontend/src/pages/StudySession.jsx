@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { axiosClient } from '../api/axiosClient';
+import { DataContext } from '../context/DataContext';
 
 export default function StudySession() {
     const navigate = useNavigate();
     const { deckId } = useParams();
+    const { refreshUserProfile } = useContext(DataContext);
     const [cards, setCards] = useState([]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isFlipped, setIsFlipped] = useState(false);
@@ -30,6 +32,8 @@ export default function StudySession() {
             try {
                 // Check in to the deck (only works for default deck, fails silently for others)
                 await axiosClient.post(`/api/study/${deckId}/check-in`);
+                // Refresh cached profile so streak is up-to-date on Dashboard
+                refreshUserProfile();
             } catch (err) {
                 // Silently fail - only default deck check-in matters
                 console.log('Check-in skipped (non-default deck or error)');

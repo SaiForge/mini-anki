@@ -1,7 +1,7 @@
 import { useContext, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { axiosClient } from '../api/axiosClient';
+import { DataContext } from '../context/DataContext';
 
 const LAST_USED_DECK_KEY = 'mini_anki_last_used_deck_id';
 
@@ -9,10 +9,17 @@ export default function Dashboard() {
     const navigate = useNavigate();
     const location = useLocation();
     const { logout } = useContext(AuthContext);
+    const {
+        decks,
+        userProfile,
+        loading,
+        error,
+        addDeck,
+        deleteDeck,
+        addCard,
+        refreshUserProfile,
+    } = useContext(DataContext);
 
-    const [decks, setDecks] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
     const [selectedDeckId, setSelectedDeckId] = useState('');
     const [frontText, setFrontText] = useState('');
     const [backText, setBackText] = useState('');
@@ -23,39 +30,11 @@ export default function Dashboard() {
     const [deckToDelete, setDeckToDelete] = useState(null);
     const [deletingDeck, setDeletingDeck] = useState(false);
     const [toast, setToast] = useState(null);
-    const [userProfile, setUserProfile] = useState(null);
     const [newDeckName, setNewDeckName] = useState('');
     const [creatingDeck, setCreatingDeck] = useState(false);
     const [deckFormError, setDeckFormError] = useState('');
     const longPressTimerRef = useRef(null);
     const frontTextareaRef = useRef(null);
-
-    useEffect(() => {
-        const fetchDecks = async () => {
-            try {
-                setLoading(true);
-                setError('');
-                const response = await axiosClient.get('/api/decks/');
-                setDecks(response.data || []);
-            } catch (err) {
-                setError(err.response?.data?.detail || 'Could not load decks right now.');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        const fetchUserProfile = async () => {
-            try {
-                const response = await axiosClient.get('/api/auth/me');
-                setUserProfile(response.data);
-            } catch (err) {
-                console.error('Failed to fetch user profile', err);
-            }
-        };
-
-        fetchDecks();
-        fetchUserProfile();
-    }, []);
 
     useEffect(() => {
         if (decks.length === 0) {
@@ -129,10 +108,7 @@ export default function Dashboard() {
 
         try {
             setCreatingCard(true);
-            await axiosClient.post(`/api/decks/${selectedDeckId}/cards`, {
-                front_text: frontText,
-                back_text: backText,
-            });
+            await addCard(selectedDeckId, frontText, backText);
 
             window.localStorage.setItem(LAST_USED_DECK_KEY, String(selectedDeckId));
             setFrontText('');
@@ -186,9 +162,8 @@ export default function Dashboard() {
         }
         try {
             setCreatingDeck(true);
-            const response = await axiosClient.post('/api/decks/', { title: newDeckName });
-            setDecks(prev => [...prev, response.data]);
-            setSelectedDeckId(String(response.data.deck_id));
+            const newDeck = await addDeck(newDeckName);
+            setSelectedDeckId(String(newDeck.deck_id));
             setNewDeckName('');
         } catch (err) {
             setDeckFormError(err.response?.data?.detail || 'Could not create deck.');
@@ -235,8 +210,7 @@ export default function Dashboard() {
 
         try {
             setDeletingDeck(true);
-            await axiosClient.delete(`/api/decks/${deckToDelete.deck_id}`);
-            setDecks((prev) => prev.filter((deck) => deck.deck_id !== deckToDelete.deck_id));
+            await deleteDeck(deckToDelete.deck_id);
 
             if (String(selectedDeckId) === String(deckToDelete.deck_id)) {
                 const nextDeck = decks.find((deck) => deck.deck_id !== deckToDelete.deck_id);
