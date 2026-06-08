@@ -174,8 +174,8 @@ def check_in_deck(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Check in to the default deck. This maintains the streak even if there are no due cards.
-    Streak increments automatically on the first check-in of the day.
+    Check in to the default deck. Only updates the streak if the user
+    has zero due cards remaining (i.e., they have completed all reviews).
     """
     # 1. Verify deck ownership
     deck = (
@@ -192,8 +192,26 @@ def check_in_deck(
             status_code=400, detail="Check-in only available for default deck"
         )
 
-    # 3. Update streak on first check-in of the day
-    _update_user_streak(current_user, db)
+    # 3. Only update streak if user has no due cards remaining
+    today = datetime.now(timezone.utc).date()
+
+    user_deck_ids = (
+        db.query(Deck.deck_id).filter(Deck.user_id == current_user.user_id).all()
+    )
+    user_deck_ids = [d[0] for d in user_deck_ids]
+
+    remaining_due_cards = (
+        db.query(Card, Schedule)
+        .join(Schedule)
+        .filter(
+            Card.deck_id.in_(user_deck_ids),
+            Schedule.next_review_date <= today,
+        )
+        .count()
+    )
+
+    if remaining_due_cards == 0:
+        _update_user_streak(current_user, db)
 
     # 4. Commit
     db.commit()
