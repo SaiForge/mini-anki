@@ -78,6 +78,12 @@ body::before {
   box-shadow: 4px 4px 0 rgba(28, 28, 24, 0.08);
 }
 
+[data-theme='dark'] .ma-topbar {
+  background: var(--surface-2);
+  border-color: var(--outline-soft);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.3);
+}
+
 .ma-topbar-left {
   display: flex;
   align-items: center;
@@ -96,6 +102,10 @@ body::before {
   font-size: 28px;
   color: var(--mint-strong);
   transform: rotate(-1deg);
+}
+
+[data-theme='dark'] .ma-brand {
+  color: var(--mint-strong);
 }
 
 .ma-brand-button {
@@ -136,9 +146,20 @@ body::before {
   cursor: pointer;
 }
 
+[data-theme='dark'] .ma-nav-link,
+[data-theme='dark'] .ma-link-btn {
+  color: var(--ink);
+}
+
 .ma-nav-link:hover,
 .ma-link-btn:hover {
   background: color-mix(in srgb, var(--mint) 35%, white);
+  color: var(--mint-strong);
+}
+
+[data-theme='dark'] .ma-nav-link:hover,
+[data-theme='dark'] .ma-link-btn:hover {
+  background: var(--surface-3);
   color: var(--mint-strong);
 }
 
