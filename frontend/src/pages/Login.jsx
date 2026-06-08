@@ -3,6 +3,7 @@ import { useState, useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { axiosClient } from '../api/axiosClient';
+import ThemeToggle from '../components/ThemeToggle';
 
 export default function Login() {
     const navigate = useNavigate();
@@ -141,6 +142,10 @@ export default function Login() {
             <div className="ma-login-decor" aria-hidden="true">
                 <span className="ma-login-orb ma-login-orb-mint" />
                 <span className="ma-login-orb ma-login-orb-lavender" />
+            </div>
+
+            <div style={{ position: 'absolute', top: '16px', right: '16px', zIndex: 10 }}>
+                <ThemeToggle />
             </div>
 
             <main className="ma-login-wrap">

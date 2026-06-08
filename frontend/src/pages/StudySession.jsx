@@ -2,6 +2,7 @@ import { useState, useEffect, useContext } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { axiosClient } from '../api/axiosClient';
 import { DataContext } from '../context/DataContext';
+import ThemeToggle from '../components/ThemeToggle';
 
 export default function StudySession() {
     const navigate = useNavigate();
@@ -147,16 +148,19 @@ export default function StudySession() {
                             key={`study-card-progress-${currentIndex}-${cards.length}`}
                             className="ma-subtle-text ma-fade-up ma-float-grade ma-fade-delay-1"
                         >
-                            Card {currentIndex + 1} of {cards.length}
+                        Card {currentIndex + 1} of {cards.length}
                         </p>
                     </div>
-                    <button
-                        type="button"
-                        className="ma-btn ma-btn-secondary ma-float-grade ma-fade-up ma-fade-delay-2"
-                        onClick={() => navigate('/dashboard')}
-                    >
-                        Exit
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }} className="ma-float-grade ma-fade-up ma-fade-delay-2">
+                        <ThemeToggle />
+                        <button
+                            type="button"
+                            className="ma-btn ma-btn-secondary"
+                            onClick={() => navigate('/dashboard')}
+                        >
+                            Exit
+                        </button>
+                    </div>
                 </div>
 
                 <div className="ma-progress-shell">

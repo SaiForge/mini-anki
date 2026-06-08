@@ -1,6 +1,7 @@
 import { useContext, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DataContext } from '../context/DataContext';
+import ThemeToggle from '../components/ThemeToggle';
 
 export default function DeckEditor() {
     const navigate = useNavigate();
@@ -53,6 +54,9 @@ export default function DeckEditor() {
                     <button type="button" className="ma-brand-button" onClick={handleBrandClick}>
                         <h1 className="ma-brand">Mini Anki</h1>
                     </button>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <ThemeToggle />
                 </div>
             </header>
 

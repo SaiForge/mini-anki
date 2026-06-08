@@ -16,6 +16,22 @@
   --error-ink: #93000a;
 }
 
+[data-theme='dark'] {
+  --surface: #1e1e1e;
+  --surface-2: #2c2c2c;
+  --surface-3: #383838;
+  --ink: #e0e0e0;
+  --ink-soft: #a0a0a0;
+  --outline: #4d4d4d;
+  --outline-soft: #333333;
+  --mint: #0f4d38;
+  --mint-strong: #4ade80;
+  --blue: #1e3a5f;
+  --lavender: #3c2a4d;
+  --error: #5c1e1e;
+  --error-ink: #ffb4ab;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -26,6 +42,10 @@ body {
   color: var(--ink);
   background: radial-gradient(circle at 10% 10%, #fffdf8 0%, var(--surface) 55%, #f7f2ec 100%);
   min-height: 100vh;
+}
+
+[data-theme='dark'] body {
+  background: radial-gradient(circle at 10% 10%, #1a1a1a 0%, var(--surface) 55%, #121212 100%);
 }
 
 body::before {
@@ -413,6 +433,67 @@ body::before {
   min-height: 470px;
   background-image: repeating-linear-gradient(transparent, transparent 31px, #dde4e6 31px, #dde4e6 32px);
   background-position: 0 38px;
+}
+
+[data-theme='dark'] .ma-login-page {
+  background: radial-gradient(circle at 12% 12%, #111e18 0%, #10161a 45%, #0f1214 100%);
+}
+
+[data-theme='dark'] .ma-login-brand {
+  color: #4ade80;
+}
+
+[data-theme='dark'] .ma-login-tagline,
+[data-theme='dark'] .ma-login-footer {
+  color: #a0a0a0;
+}
+
+[data-theme='dark'] .ma-login-card {
+  background: #1a1a1a;
+  border-color: #333333;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.3), 0 4px 0 rgba(0, 0, 0, 0.5);
+  background-image: repeating-linear-gradient(transparent, transparent 31px, #2a2a2a 31px, #2a2a2a 32px);
+}
+
+[data-theme='dark'] .ma-login-toggle {
+  background: #2a2a2a;
+  border-color: #333333;
+}
+
+[data-theme='dark'] .ma-login-toggle-btn {
+  color: #a0a0a0;
+}
+
+[data-theme='dark'] .ma-login-toggle-btn.is-active {
+  background: #0f4d38;
+  color: #4ade80;
+}
+
+[data-theme='dark'] .ma-login-label {
+  color: #e0e0e0;
+}
+
+[data-theme='dark'] .ma-login-input {
+  background: #222222;
+  border-color: #444444;
+  color: #e0e0e0;
+}
+
+[data-theme='dark'] .ma-login-input:focus {
+  border-color: #4ade80;
+  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.22);
+}
+
+[data-theme='dark'] .ma-login-submit {
+  background: #0f4d38;
+  border-color: #0c3d2c;
+  color: #4ade80;
+  box-shadow: 3px 3px 0 #092e21;
+}
+
+[data-theme='dark'] .ma-login-forgot,
+[data-theme='dark'] .ma-login-footer-link {
+  color: #4ade80;
 }
 
 .ma-login-toggle {

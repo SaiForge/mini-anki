@@ -2,6 +2,7 @@ import { useContext, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { DataContext } from '../context/DataContext';
+import ThemeToggle from '../components/ThemeToggle';
 
 const LAST_USED_DECK_KEY = 'mini_anki_last_used_deck_id';
 
@@ -255,6 +256,7 @@ export default function Dashboard() {
                     <span style={{ fontWeight: '500', fontSize: '0.9rem', color: 'var(--text-color, inherit)' }}>
                         🔥 {userProfile ? userProfile.current_streak : 0} Streak
                     </span>
+                    <ThemeToggle />
                     <button type="button" className="ma-nav-link" onClick={logout}>
                         Logout
                     </button>
