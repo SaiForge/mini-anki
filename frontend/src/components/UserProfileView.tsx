@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { FeedItem, StudyDeck } from "../types";
 import { FeedCard } from "./cards/FeedCard";
+import { useEffect } from "react";
+import { getPublicProfile, followUser, unfollowUser, checkIsFollowing } from "../api/socialApi";
 
 interface UserProfileViewProps {
   username: string;
@@ -268,8 +270,49 @@ export default function UserProfileView({
   const [copiedLinkPostId, setCopiedLinkPostId] = useState<string | null>(null);
   const [importStatus, setImportStatus] = useState<Record<string, boolean>>({});
 
+  const [remoteUser, setRemoteUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [isFollowedStatus, setIsFollowedStatus] = useState(false);
+  const [followProcessing, setFollowProcessing] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const fetchUser = async () => {
+      setLoading(true);
+      try {
+        const u = await getPublicProfile(username);
+        if (active) {
+          setRemoteUser(u);
+          const followData = await checkIsFollowing(u.user_id);
+          setIsFollowedStatus(followData.is_following);
+        }
+      } catch (err) {
+        console.warn("Failed to load user profile via API, falling back to mock", err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    fetchUser();
+    return () => { active = false; };
+  }, [username]);
+
   // Resolve user information dynamically
   const userDetails = useMemo(() => {
+    if (remoteUser) {
+      return {
+        id: remoteUser.user_id,
+        name: remoteUser.full_name || remoteUser.username,
+        bio: remoteUser.bio || "No biography provided.",
+        avatar: remoteUser.full_name ? remoteUser.full_name.substring(0,2).toUpperCase() : remoteUser.username.substring(0,2).toUpperCase(),
+        avatarBg: "bg-neutral-900 border-zinc-700 text-white",
+        streak: remoteUser.current_streak || 0,
+        followers: remoteUser.followers_count || 0,
+        following: remoteUser.following_count || 0,
+        customAvatarUrl: remoteUser.profile_picture_url,
+        decks: [] // Decks loading will be handled in Phase 3
+      };
+    }
+
     // If logged-in user, load updated version from localStorage if present
     if (username === "@kolarsaibag") {
       const saved = localStorage.getItem("user_profile_data_custom");
@@ -343,13 +386,6 @@ export default function UserProfileView({
     return feedItems.find(item => item.authorUsername === username);
   }, [feedItems, username]);
 
-  const isFollowedStatus = useMemo(() => {
-    if (matchedFeedItem) {
-      return !!matchedFeedItem.isFollowed;
-    }
-    return false;
-  }, [matchedFeedItem]);
-
   // Filter public posts of this specific user
   const publicPosts = useMemo(() => {
     return feedItems.filter(item => item.authorUsername === username);
@@ -361,6 +397,24 @@ export default function UserProfileView({
       ...prev,
       [id]: !prev[id]
     }));
+  };
+
+  const handleToggleFollow = async () => {
+    if (!remoteUser) return;
+    setFollowProcessing(true);
+    try {
+      if (isFollowedStatus) {
+        await unfollowUser(remoteUser.user_id);
+        setIsFollowedStatus(false);
+      } else {
+        await followUser(remoteUser.user_id);
+        setIsFollowedStatus(true);
+      }
+    } catch (e) {
+      console.error("Failed to toggle follow", e);
+    } finally {
+      setFollowProcessing(false);
+    }
   };
 
   // Helper copy link action
@@ -443,23 +497,25 @@ export default function UserProfileView({
           </div>
           <div className="pt-4 sm:pt-0 flex flex-col gap-2">
             {/* Profile Follow states */}
-            {username !== "@kolarsaibag" && (
+            {username !== "@kolarsaibag" && userEmail !== username && remoteUser && (
               <div className="flex-shrink-0">
                 {!isFollowedStatus ? (
                   <button
-                    onClick={() => onToggleFollow(username)}
-                    className="px-4 py-2 bg-transparent hover:bg-white/5 text-xs font-sans font-medium text-white border border-[#1A1A1A] hover:border-white/40 rounded-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                    onClick={handleToggleFollow}
+                    disabled={followProcessing}
+                    className="px-4 py-2 bg-transparent hover:bg-white/5 text-xs font-sans font-medium text-white border border-[#1A1A1A] hover:border-white/40 rounded-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                   >
                     <UserPlus className="w-3.5 h-3.5" />
-                    <span>Follow</span>
+                    <span>{followProcessing ? "..." : "Follow"}</span>
                   </button>
                 ) : (
                   <button
-                    onClick={() => onToggleFollow(username)}
-                    className="px-4 py-2 bg-transparent hover:bg-white/5 text-xs font-sans font-medium text-green-400 border border-[#1A1A1A] hover:border-green-400/40 rounded-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                    onClick={handleToggleFollow}
+                    disabled={followProcessing}
+                    className="px-4 py-2 bg-transparent hover:bg-white/5 text-xs font-sans font-medium text-green-400 border border-[#1A1A1A] hover:border-green-400/40 rounded-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                   >
                     <UserCheck className="w-3.5 h-3.5" />
-                    <span>Following</span>
+                    <span>{followProcessing ? "..." : "Following"}</span>
                   </button>
                 )}
               </div>

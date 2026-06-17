@@ -25,6 +25,10 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = Field(None, min_length=1, max_length=100)
     bio: Optional[str] = None
     profile_picture_url: Optional[str] = None
+    website_url: Optional[str] = None
+    location: Optional[str] = None
+    is_public: Optional[bool] = None
+    tags: Optional[list[str]] = None
 
 
 
@@ -45,10 +49,31 @@ class UserResponse(BaseModel):
     full_name: Optional[str] = None
     bio: Optional[str] = None
     profile_picture_url: Optional[str] = None
+    website_url: Optional[str] = None
+    location: Optional[str] = None
+    is_public: Optional[bool] = None
+    tags: Optional[list[str]] = None
     created_at: datetime
     is_verified: bool
     current_streak: int
     last_review_date: Optional[date]
+
+    class Config:
+        from_attributes = True
+
+
+class PublicUserResponse(BaseModel):
+    user_id: UUID
+    username: Optional[str] = None
+    full_name: Optional[str] = None
+    bio: Optional[str] = None
+    profile_picture_url: Optional[str] = None
+    website_url: Optional[str] = None
+    location: Optional[str] = None
+    tags: Optional[list[str]] = None
+    current_streak: int
+    followers_count: int
+    following_count: int
 
     class Config:
         from_attributes = True

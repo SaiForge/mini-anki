@@ -20,7 +20,8 @@ import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { Label } from "./ui/Label";
 import { cn } from "../lib/utils";
-import { UserResponse } from "../api/authApi";
+import { UserResponse, updateMe } from "../api/authApi";
+import { getFollowers, getFollowing } from "../api/socialApi";
 
 interface ProfileViewProps {
   userEmail: string;
@@ -81,39 +82,42 @@ export default function ProfileView({ userEmail, currentUser, stats, onResetStat
 
 
   // Load custom profile state, seeding from real backend user if available
-  const [profile, setProfile] = useState<ProfileData>(() => {
-    const saved = localStorage.getItem("user_profile_data_custom");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // Fallback to default
-      }
-    }
-    // First mount: currentUser may not be ready yet (async), return placeholder
-    return {
+  const [profile, setProfile] = useState<ProfileData>({
       name: userEmail.split("@")[0],
       role: "Distributed Systems Architect",
       bio: "Synthesizing deep asynchronous execution flows, system structures, and reactive algorithms.",
       avatarUrl: AVATAR_PRESETS[4].url,
-      tags: ["Asynchronous Logic", "Database Tuning", "System Design", "Vite Bundles"],
-      followers: 24,
-      following: 130
-    };
+      tags: [],
+      followers: 0,
+      following: 0
   });
 
-  // When currentUser arrives from the API, hydrate the profile IF no custom local data exists
+  // When currentUser arrives from the API, hydrate the profile
   useEffect(() => {
     if (!currentUser) return;
-    const hasLocalOverride = !!localStorage.getItem("user_profile_data_custom");
-    if (!hasLocalOverride) {
-      setProfile(prev => ({
-        ...prev,
-        name: currentUser.full_name || prev.name,
-        bio: currentUser.bio || prev.bio,
-        avatarUrl: currentUser.profile_picture_url || prev.avatarUrl,
-      }));
-    }
+    setProfile(prev => ({
+      ...prev,
+      name: currentUser.full_name || prev.name,
+      bio: currentUser.bio || prev.bio,
+      avatarUrl: currentUser.profile_picture_url || prev.avatarUrl,
+      tags: currentUser.tags || prev.tags,
+    }));
+
+    const fetchSocialStats = async () => {
+      try {
+        const followersList = await getFollowers(currentUser.user_id);
+        const followingList = await getFollowing(currentUser.user_id);
+        setProfile(p => ({
+          ...p,
+          followers: followersList.length,
+          following: followingList.length
+        }));
+      } catch (e) {
+        console.error("Failed to fetch social network stats", e);
+      }
+    };
+
+    fetchSocialStats();
   }, [currentUser]);
 
   // Keep temporary draft values while editing
@@ -126,13 +130,27 @@ export default function ProfileView({ userEmail, currentUser, stats, onResetStat
     }
   }, [isEditing, profile]);
 
-  const handleSave = (e: React.FormEvent) => {
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setProfile(draft);
-    localStorage.setItem("user_profile_data_custom", JSON.stringify(draft));
-    setIsEditing(false);
-    setSuccessMsg("Profile variables stored successfully.");
-    setTimeout(() => setSuccessMsg(""), 2000);
+    setIsSaving(true);
+    try {
+      await updateMe({
+        full_name: draft.name,
+        bio: draft.bio,
+        profile_picture_url: draft.avatarUrl,
+        tags: draft.tags,
+      });
+      setProfile(draft);
+      setIsEditing(false);
+      setSuccessMsg("Profile variables stored successfully.");
+      setTimeout(() => setSuccessMsg(""), 2000);
+    } catch (error) {
+      console.error("Failed to save profile", error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleResetStatsClick = () => {
@@ -267,9 +285,10 @@ export default function ProfileView({ userEmail, currentUser, stats, onResetStat
                   size="sm"
                   isDarkMode={isDarkMode}
                   className="flex items-center gap-1"
+                  disabled={isSaving}
                 >
                   <Check className="w-3.5 h-3.5" />
-                  <span>Save Changes</span>
+                  <span>{isSaving ? "Saving..." : "Save Changes"}</span>
                 </Button>
               </div>
             </div>

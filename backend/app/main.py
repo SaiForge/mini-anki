@@ -1,4 +1,4 @@
-from app.api import auth_router, deck_router, study_router
+from app.api import auth_router, deck_router, study_router, social_router
 
 # app/main.py (Snippet to add)
 from app.db.database import engine, get_db
@@ -61,6 +61,7 @@ def migrate_database_schema():
 app.include_router(auth_router.router)
 app.include_router(deck_router.router)
 app.include_router(study_router.router)
+app.include_router(social_router.router)
 
 
 @app.get("/")
