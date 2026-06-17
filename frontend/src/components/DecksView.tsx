@@ -132,7 +132,7 @@ export default function DecksView({
       )}
 
       {/* Centered Study Tracks with hairline rows layout */}
-      <div className="border border-[#1A1A1A] rounded-xs overflow-hidden divide-y divide-[#1A1A1A]">
+      <div className="border border-[#1A1A1A] rounded-lg shadow-sm overflow-hidden divide-y divide-[#1A1A1A]">
         {decksLoading ? (
           // Loading skeleton
           [0, 1, 2].map(i => (

@@ -75,10 +75,10 @@ export function FeedCard({
 
     return (
         <div 
-          className={`group border rounded-xs transition-all duration-300 p-5 md:p-6 cursor-pointer relative ${
+          className={`group border rounded-lg transition-all duration-300 p-5 md:p-6 cursor-pointer relative shadow-md ${
             isDarkMode 
-              ? "bg-[#0b0b0b] border-zinc-800 hover:border-zinc-700 shadow-md"
-              : "bg-[#fdfbfb] border-[#ebdcd7] shadow-[0_2px_8px_rgba(34,34,59,0.04)] hover:shadow-[0_4px_16px_rgba(34,34,59,0.08)]"
+              ? "bg-[#0b0b0b] border-zinc-800 hover:border-zinc-700"
+              : "bg-[#fdfbfb] border-[#ebdcd7] hover:shadow-[0_4px_16px_rgba(34,34,59,0.08)]"
           }`}
           onClick={onToggleReveal}
         >
@@ -303,7 +303,7 @@ export function FeedCard({
 
       <div 
         onClick={onToggleReveal}
-        className={`hairline-border bg-black transition-all duration-300 relative overflow-hidden rounded-xs select-none ${
+        className={`hairline-border bg-black transition-all duration-300 relative overflow-hidden rounded-lg shadow-md select-none ${
           isSingle 
             ? "border-[#1C1C1C] bg-zinc-950/20" 
             : isFullyRevealed
