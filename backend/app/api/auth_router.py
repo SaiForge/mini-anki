@@ -1,11 +1,12 @@
 import os
-import boto3
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.all_models import User
 from app.schemas.user_schema import (
     UserCreate,
+    UserLogin,
+    UserUpdate,
     UserResponse,
     Token,
     MessageResponse,
@@ -16,8 +17,6 @@ from app.core.security import (
     get_password_hash,
     verify_password,
     create_access_token,
-    create_email_verification_token,
-    decode_email_verification_token,
     create_password_reset_token,
     decode_password_reset_token,
     ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -28,62 +27,18 @@ from jose import JWTError, ExpiredSignatureError
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
-AWS_REGION = "us-east-2"
-SES_SENDER_EMAIL = "noreply@hirechance.in"
-FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "https://minianki.netlify.app")
+FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173")
 
-ses_client = boto3.client("ses", region_name=AWS_REGION)
-
-
-def send_verification_email(email: str, token: str) -> None:
-    if not SES_SENDER_EMAIL:
-        raise RuntimeError("SES_SENDER_EMAIL is not configured")
-
-    verify_url = f"{FRONTEND_BASE_URL.rstrip('/')}/verify?token={token}"
-
-    ses_client.send_email(
-        Source=SES_SENDER_EMAIL,
-        Destination={
-            "ToAddresses": [email],
-        },
-        Message={
-            "Subject": {"Data": "Verify your Mini Anki account"},
-            "Body": {
-                "Text": {
-                    "Data": (
-                        "Welcome to Mini Anki! "
-                        f"Click here to verify your account: {verify_url}"
-                    )
-                }
-            },
-        },
-    )
 
 
 def send_password_reset_email(email: str, token: str) -> None:
-    if not SES_SENDER_EMAIL:
-        raise RuntimeError("SES_SENDER_EMAIL is not configured")
-
     reset_url = f"{FRONTEND_BASE_URL.rstrip('/')}/reset-password?token={token}"
 
-    ses_client.send_email(
-        Source=SES_SENDER_EMAIL,
-        Destination={
-            "ToAddresses": [email],
-        },
-        Message={
-            "Subject": {"Data": "Reset your Mini Anki password"},
-            "Body": {
-                "Text": {
-                    "Data": (
-                        "Click the link below to reset your Mini Anki password. "
-                        "This link will expire in 1 hour.\n\n"
-                        f"{reset_url}"
-                    )
-                }
-            },
-        },
-    )
+    print("\n" + "="*50)
+    print("🔔 [LOCAL OFFLINE MODE] PASSWORD RESET")
+    print(f"To: {email}")
+    print(f"Link: {reset_url}")
+    print("="*50 + "\n")
 
 
 @router.post(
@@ -97,7 +52,15 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
 
     # Hash password and create user
     hashed_password = get_password_hash(user.password)
-    new_user = User(email=user.email, password_hash=hashed_password, is_verified=False)
+    new_user = User(
+        email=user.email, 
+        password_hash=hashed_password, 
+        username=user.username,
+        full_name=user.full_name,
+        bio=user.bio,
+        profile_picture_url=user.profile_picture_url,
+        is_verified=True
+    )
 
     db.add(new_user)
     db.commit()
@@ -112,18 +75,11 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
     db.add(default_deck)
     db.commit()
 
-    try:
-        verification_token = create_email_verification_token(new_user.email)
-        send_verification_email(new_user.email, verification_token)
-    except Exception as e:
-        # We are injecting the exact AWS error 'str(e)' directly into the frontend response
-        raise HTTPException(status_code=500, detail=f"SES Error: {str(e)}")
-
-    return {"message": "User created. Please check your email to verify."}
+    return {"message": "User created successfully! You can now log in."}
 
 
 @router.post("/login", response_model=Token)
-def login_user(user: UserCreate, db: Session = Depends(get_db)):
+def login_user(user: UserLogin, db: Session = Depends(get_db)):
     # Find user
     db_user = db.query(User).filter(User.email == user.email).first()
     if not db_user or not verify_password(user.password, db_user.password_hash):
@@ -131,11 +87,6 @@ def login_user(user: UserCreate, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
         )
 
-    if not db_user.is_verified:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Email not verified. Check your inbox.",
-        )
 
     # Generate JWT
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -151,61 +102,32 @@ def get_user_profile(current_user: User = Depends(get_current_user)):
     return current_user
 
 
-@router.get("/verify", response_model=MessageResponse)
-def verify_email(token: str, db: Session = Depends(get_db)):
-    try:
-        email = decode_email_verification_token(token)
-    except ExpiredSignatureError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Verification link has expired.",
-        )
-    except (JWTError, ValueError):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid verification link.",
-        )
+@router.put("/me", response_model=UserResponse)
+def update_user_profile(
+    user_update: UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if user_update.username is not None:
+        # Check if username already exists for another user
+        if user_update.username != current_user.username:
+            db_user = db.query(User).filter(User.username == user_update.username).first()
+            if db_user:
+                raise HTTPException(status_code=400, detail="Username already taken")
+        current_user.username = user_update.username
 
-    db_user = db.query(User).filter(User.email == email).first()
-    if not db_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found.",
-        )
+    if user_update.full_name is not None:
+        current_user.full_name = user_update.full_name
 
-    if db_user.is_verified:
-        return {"message": "Email already verified. You can log in."}
+    if user_update.bio is not None:
+        current_user.bio = user_update.bio
 
-    db_user.is_verified = True
+    if user_update.profile_picture_url is not None:
+        current_user.profile_picture_url = user_update.profile_picture_url
+
     db.commit()
-
-    return {"message": "Email successfully verified! You can now log in."}
-
-
-@router.post("/resend-verification", response_model=MessageResponse)
-def resend_verification_email(request: UserEmailRequest, db: Session = Depends(get_db)):
-    """Resend verification email for unverified users."""
-    db_user = db.query(User).filter(User.email == request.email).first()
-    
-    if not db_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found.",
-        )
-    
-    if db_user.is_verified:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email is already verified.",
-        )
-    
-    try:
-        verification_token = create_email_verification_token(db_user.email)
-        send_verification_email(db_user.email, verification_token)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"SES Error: {str(e)}")
-    
-    return {"message": "Verification email sent. Please check your inbox."}
+    db.refresh(current_user)
+    return current_user
 
 
 @router.post("/forgot-password", response_model=MessageResponse)
@@ -221,7 +143,7 @@ def forgot_password(request: UserEmailRequest, db: Session = Depends(get_db)):
         reset_token = create_password_reset_token(db_user.email)
         send_password_reset_email(db_user.email, reset_token)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"SES Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error sending reset email: {str(e)}")
     
     return {"message": "If an account exists with this email, a password reset link has been sent."}
 

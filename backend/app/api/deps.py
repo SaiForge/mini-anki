@@ -2,6 +2,7 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
+import uuid
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.all_models import User
@@ -15,10 +16,11 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(token_a
     try:
         # Decode the JWT to extract the user_id (the "sub" claim)
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None:
+        user_id_str: str = payload.get("sub")
+        if user_id_str is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
-    except JWTError:
+        user_id = uuid.UUID(user_id_str)
+    except (JWTError, ValueError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
 
     # Fetch the actual user from the DB

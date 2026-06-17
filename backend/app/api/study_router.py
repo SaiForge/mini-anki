@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+import uuid
 from datetime import datetime, timezone, timedelta, date
 from app.db.database import get_db
 from app.models.all_models import Card, Schedule, ReviewLog, Deck, User
@@ -38,7 +39,7 @@ def _update_user_streak(user: User, db: Session) -> bool:
 
 @router.get("/{deck_id}/due", response_model=list[DueCardResponse])
 def get_due_cards(
-    deck_id: str,
+    deck_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -169,7 +170,7 @@ class CheckInResponse(BaseModel):
 
 @router.post("/{deck_id}/check-in", response_model=CheckInResponse)
 def check_in_deck(
-    deck_id: str,
+    deck_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):

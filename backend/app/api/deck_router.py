@@ -1,6 +1,7 @@
 # app/api/deck_router.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+import uuid
 from datetime import datetime, timezone
 from app.db.database import get_db
 from app.models.all_models import Deck, Card, Schedule, User
@@ -26,6 +27,8 @@ def create_deck(
     db.add(new_deck)
     db.commit()
     db.refresh(new_deck)
+    # Attach card_count for the response schema
+    new_deck.card_count = 0
     return new_deck
 
 
@@ -48,12 +51,15 @@ def get_user_decks(
 
     # Only return decks belonging to this specific user (Tenant Isolation)
     decks = db.query(Deck).filter(Deck.user_id == current_user.user_id).all()
+    # Annotate each deck with its real card count
+    for deck in decks:
+        deck.card_count = len(deck.cards)
     return decks
 
 
 @router.delete("/{deck_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_deck(
-    deck_id: str,
+    deck_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -79,7 +85,7 @@ def delete_deck(
     "/{deck_id}/cards", response_model=CardResponse, status_code=status.HTTP_201_CREATED
 )
 def create_card(
-    deck_id: str,
+    deck_id: uuid.UUID,
     card: CardCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

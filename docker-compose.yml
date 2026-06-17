@@ -1,24 +1,50 @@
 version: '3.8'
 
 services:
+
+  # ─── PostgreSQL 15 (Alpine) ────────────────────────────────────────────────
+  db:
+    image: postgres:15-alpine
+    container_name: minianki_db
+    restart: always
+    environment:
+      POSTGRES_DB: minianki
+      POSTGRES_USER: minianki_user
+      POSTGRES_PASSWORD: minianki_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U minianki_user -d minianki"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ─── FastAPI Backend ───────────────────────────────────────────────────────
   backend:
     build: ./backend
     container_name: minianki_backend
     restart: always
     environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - SECRET_KEY=${SECRET_KEY}
-      - FRONTEND_BASE_URL=${FRONTEND_BASE_URL}
+      - SECRET_KEY=local-dev-secret-key
+      - FRONTEND_BASE_URL=http://localhost:5173
+      - DATABASE_URL=postgresql://minianki_user:minianki_pass@db:5432/minianki
     ports:
       - "8000:8000"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
 
+  # ─── Vite Frontend ─────────────────────────────────────────────────────────
   frontend:
     build: ./frontend
     container_name: minianki_frontend
     environment:
-      - VITE_API_URL=${VITE_API_URL}
+      - VITE_API_URL=http://localhost:8000
     ports:
       - "5173:5173"
     depends_on:
@@ -26,3 +52,6 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+
+volumes:
+  postgres_data:

@@ -14,6 +14,7 @@ class DeckResponse(BaseModel):
     title: str
     created_at: datetime
     is_default: int
+    card_count: int = 0
 
     class Config:
         from_attributes = True

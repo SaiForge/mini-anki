@@ -1,3 +1,232 @@
-#root {
-  min-height: 100vh;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+:root {
+  --theme-bg: #050b19; /* --ink-black */
+  --theme-surface-lowest: #051f2c; /* --ink-black-2 */
+  --theme-surface-low: #102d37; /* --jet-black */
+  --theme-surface: #0e313d; /* --jet-black-2 */
+  --theme-surface-container: #083346; /* --deep-space-blue */
+  --theme-surface-high: #0b3b52;
+  --theme-surface-highest: #0d435c;
+  --theme-surface-bright: #0f4c69;
+  --theme-on-surface: #e2f1f7;
+  --theme-on-surface-variant: #87a2b0;
+  --theme-outline: #102d37;
+  --theme-outline-variant: #083346;
+  --theme-primary: #ffffff;
+  --theme-on-primary: #050b19;
+  --theme-black: #050b19;
+  --theme-white: #ffffff;
+  --theme-border-1a: #102d37;
+  --theme-border-22: #083346;
+  --theme-neutral-900: #051f2c;
+  --theme-selection-bg: #083346;
+  --theme-selection-text: #ffffff;
+}
+
+.light {
+  --theme-bg: #f2e9e4; /* --parchment */
+  --theme-surface-lowest: #fdfbfb;
+  --theme-surface-low: #e8deda;
+  --theme-surface: #ebdcd7;
+  --theme-surface-container: #c9ada7; /* --almond-silk */
+  --theme-surface-high: #b99d97;
+  --theme-surface-highest: #9a8c98; /* --lilac-ash */
+  --theme-surface-bright: #ebdcd7;
+  --theme-on-surface: #22223b; /* --space-indigo */
+  --theme-on-surface-variant: #4a4e69; /* --dusty-grape */
+  --theme-outline: #9a8c98; /* --lilac-ash */
+  --theme-outline-variant: #c9ada7; /* --almond-silk */
+  --theme-primary: #22223b; /* --space-indigo */
+  --theme-on-primary: #f2e9e4; /* --parchment */
+  --theme-black: #e8deda;
+  --theme-white: #22223b;
+  --theme-border-1a: #c9ada7; /* --almond-silk */
+  --theme-border-22: #9a8c98; /* --lilac-ash */
+  --theme-neutral-900: #e8deda;
+  --theme-selection-bg: #4a4e69; /* --dusty-grape */
+  --theme-selection-text: #ffffff;
+}
+
+@theme {
+  --color-surface: var(--theme-surface);
+  --color-surface-dim: var(--theme-surface);
+  --color-surface-bright: var(--theme-surface-bright);
+  --color-surface-container-lowest: var(--theme-surface-lowest);
+  --color-surface-container-low: var(--theme-surface-low);
+  --color-surface-container: var(--theme-surface-container);
+  --color-surface-container-high: var(--theme-surface-high);
+  --color-surface-container-highest: var(--theme-surface-highest);
+  --color-on-surface: var(--theme-on-surface);
+  --color-on-surface-variant: var(--theme-on-surface-variant);
+  --color-inverse-surface: var(--theme-on-surface);
+  --color-inverse-on-surface: var(--theme-surface);
+  --color-outline: var(--theme-outline);
+  --color-outline-variant: var(--theme-outline-variant);
+  --color-surface-tint: var(--theme-primary);
+  --color-primary: var(--theme-primary);
+  --color-on-primary: var(--theme-on-primary);
+  --color-primary-container: var(--theme-surface-lowest);
+  --color-on-primary-container: var(--theme-on-surface);
+  --color-inverse-primary: var(--theme-on-primary);
+  --color-secondary: var(--theme-on-surface-variant);
+  --color-on-secondary: var(--theme-surface-lowest);
+  --color-secondary-container: var(--theme-surface-container);
+  --color-on-secondary-container: var(--theme-on-surface-variant);
+  --color-tertiary: var(--theme-primary);
+  --color-on-tertiary: var(--theme-on-primary);
+  --color-tertiary-container: var(--theme-surface-lowest);
+  --color-on-tertiary-container: var(--theme-on-surface);
+  --color-apple-blue: var(--theme-primary);
+  --color-background: var(--theme-bg);
+  --color-on-background: var(--theme-on-surface);
+  --color-surface-variant: var(--theme-surface-highest);
+  
+  --color-black: var(--theme-black);
+  --color-white: var(--theme-white);
+  --color-neutral-900: var(--theme-neutral-900);
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Pro", "SF Compact", "Segoe UI", "Helvetica Neue", Helvetica, "Inter", system-ui, sans-serif;
+  --font-mono: "SF Mono", SFMono-Regular, ui-monospace, Menlo, Consolas, "JetBrains Mono", monospace;
+}
+
+@layer base {
+  body {
+    background-color: var(--theme-bg);
+    color: var(--theme-on-surface);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+}
+
+.hairline-border {
+  border: 0.5px solid var(--theme-border-1a);
+}
+
+.hairline-border-b {
+  border-bottom: 0.5px solid var(--theme-border-1a);
+}
+
+.hairline-border-r {
+  border-right: 0.5px solid var(--theme-border-1a);
+}
+
+/* Theme overrides for hardcoded classes to enable dynamic Dark & Light color palettes seamlessly */
+.bg-black {
+  background-color: var(--theme-bg);
+}
+.text-white {
+  color: var(--theme-on-surface);
+}
+.text-\[\#e5e2e1\] {
+  color: var(--theme-on-surface);
+}
+.border-\[\#1A1A1A\] {
+  border-color: var(--theme-border-1a);
+}
+.border-l-\[\#1A1A1A\] {
+  border-left-color: var(--theme-border-1a);
+}
+.border-r-\[\#1A1A1A\] {
+  border-right-color: var(--theme-border-1a);
+}
+.border-t-\[\#1A1A1A\] {
+  border-top-color: var(--theme-border-1a);
+}
+.border-b-\[\#1A1A1A\] {
+  border-bottom-color: var(--theme-border-1a);
+}
+.border-\[\#1a1a1a\] {
+  border-color: var(--theme-border-1a);
+}
+.border-\[\#222222\] {
+  border-color: var(--theme-border-22);
+}
+.bg-\[\#0e0e0e\] {
+  background-color: var(--theme-surface-lowest);
+}
+.bg-\[\#0c0c0c\] {
+  background-color: var(--theme-surface-lowest);
+}
+.bg-\[\#030303\] {
+  background-color: var(--theme-surface-lowest);
+}
+.bg-\[\#060606\] {
+  background-color: var(--theme-surface-lowest);
+}
+.bg-\[\#131313\] {
+  background-color: var(--theme-surface);
+}
+.bg-\[\#111111\] {
+  background-color: var(--theme-surface-container);
+}
+.bg-\[\#050505\] {
+  background-color: var(--theme-surface-lowest);
+}
+.bg-\[\#070707\] {
+  background-color: var(--theme-surface-lowest);
+}
+.bg-\[\#0b0b0b\] {
+  background-color: var(--theme-surface-lowest);
+}
+
+/* Light mode overrides for high-contrast accessibility of hardcoded zinc palettes */
+.light .text-zinc-100 {
+  color: var(--theme-on-surface) !important;
+}
+.light .text-zinc-200 {
+  color: var(--theme-on-surface) !important;
+}
+.light .text-zinc-300 {
+  color: var(--theme-on-surface) !important;
+}
+.light .text-zinc-400 {
+  color: var(--theme-on-surface-variant) !important;
+}
+.light .text-zinc-500 {
+  color: var(--theme-on-surface-variant) !important;
+}
+.light .text-zinc-600 {
+  color: var(--theme-on-surface-variant) !important;
+}
+.light .text-zinc-650 {
+  color: var(--theme-on-surface-variant) !important;
+}
+.light .bg-zinc-900 {
+  background-color: var(--theme-surface-low) !important;
+}
+.light .bg-zinc-950 {
+  background-color: var(--theme-surface-lowest) !important;
+}
+.light .bg-zinc-950\/20 {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+.light .border-zinc-500 {
+  border-color: var(--theme-border-22) !important;
+}
+.light .border-zinc-800 {
+  border-color: var(--theme-border-1a) !important;
+}
+.light .border-zinc-900 {
+  border-color: var(--theme-border-1a) !important;
+}
+.light .border-zinc-900\/40 {
+  border-color: var(--theme-border-1a) !important;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: var(--theme-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--theme-border-1a);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--theme-surface-high);
 }
