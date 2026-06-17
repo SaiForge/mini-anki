@@ -11,7 +11,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = "secondary", size = "md", isDarkMode = true, ...props }, ref) => {
     
     // Core base classes that almost all buttons share
-    const baseClasses = "inline-flex items-center justify-center font-mono uppercase tracking-wider rounded-xs transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed font-bold";
+    const baseClasses = "inline-flex items-center justify-center font-mono uppercase tracking-wider rounded-md transition-all duration-200 ease-in-out hover:scale-[1.02] hover:brightness-110 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed font-bold";
 
     // Size variants
     const sizeClasses = {

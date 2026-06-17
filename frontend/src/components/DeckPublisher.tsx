@@ -60,7 +60,7 @@ export function DeckPublisher({ onClose, onPublish, isDarkMode = true }: DeckPub
   return (
     <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto animated fadeIn">
       <div className={cn(
-        "w-full max-w-lg p-6 rounded-sm shadow-2xl relative transition-all duration-300",
+        "w-full max-w-lg p-6 rounded-lg shadow-md relative transition-all duration-300",
         isDarkMode ? "bg-[#0a0a0a] border border-[#1C1C1C]" : "bg-[#fdfbfb] border border-[#c9ada7]"
       )}>
         

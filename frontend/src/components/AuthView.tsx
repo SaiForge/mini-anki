@@ -111,7 +111,7 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
 
   return (
     <div className="min-h-screen bg-background text-on-surface flex items-center justify-center p-4 font-sans">
-      <div className="w-full max-w-lg bg-primary-container border border-outline-variant shadow-sm rounded-sm">
+      <div className="w-full max-w-lg bg-primary-container border border-outline-variant shadow-md rounded-lg">
         
         {/* Inner Content Container */}
         <div className="p-4 md:p-6">

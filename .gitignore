@@ -43,3 +43,4 @@ frontend/.vite/
 ANKI_INTERVIEW_FLASHCARDS.md
 .env
 
+backend/minianki.db

@@ -333,7 +333,7 @@ export default function ExploreView({
                   onStudyDeck(deck.title);
                 }
               }}
-              className={`group border rounded-xs transition-all duration-300 overflow-hidden flex flex-col justify-between ${
+              className={`group border rounded-lg shadow-md transition-all duration-300 overflow-hidden flex flex-col justify-between ${
                 isSingle 
                   ? "border-[#1A1A1A] bg-black hover:bg-[#111111] hover:border-white/30 cursor-pointer" 
                   : isFullyRevealed

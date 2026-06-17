@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { 
   FeedItem, 
   StudyDeck, 
@@ -1059,6 +1060,13 @@ export default function App() {
 
         {/* Current Content Canvas */}
         <main className="flex-1">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+            >
           {activeTab === "feed" && (
             <FeedView 
               items={feedSubTab === "ONLY_FOR_YOU" ? feedItems : publicDecksFeed}
@@ -1220,6 +1228,8 @@ export default function App() {
               onRemoveCardFromDeck={handleRemoveCardFromDeck}
             />
           )}
+            </motion.div>
+          </AnimatePresence>
         </main>
 
         {/* Mobile / Tablet Bottom Navigation */}

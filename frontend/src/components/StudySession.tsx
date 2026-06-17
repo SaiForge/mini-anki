@@ -706,7 +706,7 @@ export default function StudySession({
             {/* Flashcard container block */}
             <div 
               onClick={() => setShowAnswer(!showAnswer)}
-              className={`w-full p-5 md:p-10 lg:p-12 border rounded-xs transition-all duration-300 min-h-[180px] md:min-h-[260px] flex flex-col justify-between cursor-pointer relative active:scale-[0.99] select-none ${
+              className={`w-full p-5 md:p-10 lg:p-12 border rounded-lg transition-all duration-300 min-h-[180px] md:min-h-[260px] flex flex-col justify-between cursor-pointer relative active:scale-[0.99] select-none shadow-md ${
                 showAnswer 
                   ? isDarkMode 
                     ? "border-white/40 bg-zinc-900/40 shadow-none" 
