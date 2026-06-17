@@ -8,10 +8,25 @@ export interface UserResponse {
   full_name: string | null;
   bio: string | null;
   profile_picture_url: string | null;
+  website_url?: string | null;
+  location?: string | null;
+  is_public?: boolean;
+  tags?: string[] | null;
   created_at: string;
   is_verified: boolean;
   current_streak: number;
   last_review_date: string | null;
+}
+
+export interface UserUpdatePayload {
+  username?: string | null;
+  full_name?: string | null;
+  bio?: string | null;
+  profile_picture_url?: string | null;
+  website_url?: string | null;
+  location?: string | null;
+  is_public?: boolean;
+  tags?: string[] | null;
 }
 
 export interface TokenResponse {
@@ -51,6 +66,11 @@ export async function register(payload: {
 
 export async function getMe(): Promise<UserResponse> {
   const { data } = await axiosClient.get<UserResponse>("/api/auth/me");
+  return data;
+}
+
+export async function updateMe(payload: UserUpdatePayload): Promise<UserResponse> {
+  const { data } = await axiosClient.put<UserResponse>("/api/auth/me", payload);
   return data;
 }
 
