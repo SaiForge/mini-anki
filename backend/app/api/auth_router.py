@@ -125,9 +125,86 @@ def update_user_profile(
     if user_update.profile_picture_url is not None:
         current_user.profile_picture_url = user_update.profile_picture_url
 
+    if user_update.website_url is not None:
+        current_user.website_url = user_update.website_url
+
+    if user_update.location is not None:
+        current_user.location = user_update.location
+
+    if user_update.is_public is not None:
+        current_user.is_public = user_update.is_public
+
+    if user_update.tags is not None:
+        current_user.tags = user_update.tags
+
     db.commit()
     db.refresh(current_user)
     return current_user
+
+
+from app.schemas.user_schema import PublicUserResponse
+from app.models.all_models import Follow
+
+@router.get("/users/search", response_model=list[PublicUserResponse])
+def search_users(q: str, db: Session = Depends(get_db)):
+    if not q or len(q) < 2:
+        return []
+
+    search_term = f"%{q}%"
+    users = db.query(User).filter(
+        (User.username.ilike(search_term)) |
+        (User.full_name.ilike(search_term))
+    ).limit(20).all()
+
+    results = []
+    for u in users:
+        followers_count = db.query(Follow).filter(Follow.following_id == u.user_id).count()
+        following_count = db.query(Follow).filter(Follow.follower_id == u.user_id).count()
+        results.append({
+            "user_id": u.user_id,
+            "username": u.username,
+            "full_name": u.full_name,
+            "bio": u.bio,
+            "profile_picture_url": u.profile_picture_url,
+            "website_url": u.website_url,
+            "location": u.location,
+            "tags": u.tags,
+            "current_streak": u.current_streak,
+            "followers_count": followers_count,
+            "following_count": following_count
+        })
+
+    return results
+
+
+@router.get("/users/{username}", response_model=PublicUserResponse)
+def get_public_user_profile(username: str, db: Session = Depends(get_db)):
+    # Remove @ if present
+    if username.startswith("@"):
+        username = username[1:]
+
+    db_user = db.query(User).filter(User.username == username).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    followers_count = db.query(Follow).filter(Follow.following_id == db_user.user_id).count()
+    following_count = db.query(Follow).filter(Follow.follower_id == db_user.user_id).count()
+
+    response_data = {
+        "user_id": db_user.user_id,
+        "username": db_user.username,
+        "full_name": db_user.full_name,
+        "bio": db_user.bio,
+        "profile_picture_url": db_user.profile_picture_url,
+        "website_url": db_user.website_url,
+        "location": db_user.location,
+        "tags": db_user.tags,
+        "current_streak": db_user.current_streak,
+        "followers_count": followers_count,
+        "following_count": following_count
+    }
+
+    return response_data
 
 
 @router.post("/forgot-password", response_model=MessageResponse)

@@ -1,5 +1,5 @@
 # app/models/all_models.py
-from sqlalchemy import Column, String, Integer, Date, DateTime, ForeignKey, Text, Boolean
+from sqlalchemy import Column, String, Integer, Date, DateTime, ForeignKey, Text, Boolean, JSON, UniqueConstraint
 # pyrefly: ignore [missing-import]
 from sqlalchemy import Uuid as UUID
 from sqlalchemy.orm import relationship
@@ -17,7 +17,11 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     bio = Column(Text, nullable=True)
-    profile_picture_url = Column(String(255), nullable=True)
+    profile_picture_url = Column(String(500), nullable=True)
+    website_url = Column(String(255), nullable=True)
+    location = Column(String(100), nullable=True)
+    is_public = Column(Boolean, default=True)
+    tags = Column(JSON, nullable=True)  # Store expertise tags
     is_verified = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -27,6 +31,18 @@ class User(Base):
 
     # Relationships
     decks = relationship("Deck", back_populates="owner", cascade="all, delete-orphan")
+
+
+class Follow(Base):
+    __tablename__ = "follows"
+
+    follow_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    follower_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)  # who is following
+    following_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)  # who is being followed
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Unique constraint: a user can only follow another user once
+    __table_args__ = (UniqueConstraint('follower_id', 'following_id'),)
 
 
 class Deck(Base):
