@@ -7,14 +7,26 @@ from datetime import datetime
 # --- DECK SCHEMAS ---
 class DeckCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=100)
+    description: str | None = None
+    category: str | None = None
+    tags: list[str] | None = None
+    is_public: bool = False
 
 
 class DeckResponse(BaseModel):
     deck_id: UUID
     title: str
+    description: str | None = None
+    category: str | None = None
+    tags: list[str] | None = None
     created_at: datetime
     is_default: int
     card_count: int = 0
+    is_public: bool = False
+    fork_count: int = 0
+    like_count: int = 0
+    original_deck_id: UUID | None = None
+    has_changes: bool = False
 
     class Config:
         from_attributes = True
@@ -35,3 +47,26 @@ class CardResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# --- PULL REQUEST SCHEMAS ---
+class PullRequestCreate(BaseModel):
+    message: str | None = None
+
+class PullRequestResponse(BaseModel):
+    pr_id: UUID
+    original_deck_id: UUID
+    forked_deck_id: UUID
+    author_id: UUID
+    author_username: str | None = None
+    status: str
+    message: str | None = None
+    created_at: datetime
+    new_cards_count: int = 0
+    new_cards: list[CardResponse] | None = None
+
+    class Config:
+        from_attributes = True
+
+class PullRequestApproveRequest(BaseModel):
+    card_ids: list[UUID] | None = None

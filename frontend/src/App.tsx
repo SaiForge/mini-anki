@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   FeedItem, 
@@ -7,7 +7,10 @@ import {
   StudyStats 
 } from "./types";
 import { getMe, UserResponse } from "./api/authApi";
-import { getDecks, mapApiDeckToStudyDeck, saveDeckMeta, deleteDeck as apiDeleteDeck, DeckLocalMeta, createCard } from "./api/deckApi";
+import { getDecks, mapApiDeckToStudyDeck, saveDeckMeta, deleteDeck as apiDeleteDeck, DeckLocalMeta, createCard, getDeckCards, createDeck } from "./api/deckApi";
+import { createPost, getForYouFeed, getFollowingFeed, likePost, unlikePost, bookmarkPost, removeBookmark, deletePost, PostResponse } from "./api/feedApi";
+import { getTrendingDecks, likeDeck, unlikeDeck } from "./api/exploreApi";
+import { followUser, unfollowUser } from "./api/socialApi";
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
 import FeedView from "./components/FeedView";
@@ -20,6 +23,9 @@ import StudySession from "./components/StudySession";
 import UserProfileView from "./components/UserProfileView";
 import AuthView from "./components/AuthView";
 import { ConceptPublisher, ConceptFormData } from "./components/ConceptPublisher";
+import MessagesView from "./components/MessagesView";
+import AIChatPanel from "./components/AIChatPanel";
+import SinglePostView from "./components/SinglePostView";
 
 // Lucide custom icons for mobile/AI chat
 import { 
@@ -49,60 +55,44 @@ export default function App() {
   });
   const [currentUser, setCurrentUser] = useState<UserResponse | null>(null);
   const [decksLoading, setDecksLoading] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<string>("feed");
+  const [activeTab, setActiveTabRaw] = useState<string>("feed");
+  const [tabHistory, setTabHistory] = useState<string[]>([]);
 
-  const [publicDecksFeed] = useState<FeedItem[]>([
-    {
-      id: "deck-feed-1",
-      category: "DECK",
-      title: "Dynamic Programming Patterns",
-      content: "Deep dive into memoization, tabulation, and complexity analysis for string manipulation problems. Contains 142 Cards.",
-      likes: 340,
-      likedByUser: false,
-      bookmarkedByUser: false,
-      timeLabel: "OCT 14",
-      authorName: "Dev Kaufman",
-      authorUsername: "@dev_kaufman",
-      authorAvatar: "DK",
-      isFollowed: false,
-      tags: ["algorithms", "cs"],
-      isPrivate: false,
-    },
-    {
-      id: "deck-feed-2",
-      category: "DECK",
-      title: "Haskell: Monads in Practice",
-      content: "Pragmatic structures, functors, applicability, and computational sequencing in pure functional paradigms.",
-      likes: 890,
-      likedByUser: true,
-      bookmarkedByUser: true,
-      timeLabel: "2 DAYS AGO",
-      authorName: "Lambda Stack",
-      authorUsername: "@λ_stack",
-      authorAvatar: "LS",
-      isFollowed: true,
-      tags: ["haskell", "functional"],
-      isPrivate: false,
-    },
-    {
-      id: "deck-feed-3",
-      category: "DECK",
-      title: "Quantum Electrodynamics",
-      content: "Basic formulas, QED Feynman diagrams, photon behaviors, and perturbation methods.",
-      likes: 1205,
-      likedByUser: false,
-      bookmarkedByUser: false,
-      timeLabel: "OCT 20",
-      authorName: "QED Physicist",
-      authorUsername: "@qed_physicist",
-      authorAvatar: "QP",
-      isFollowed: false,
-      tags: ["physics", "quantum"],
-      isPrivate: false,
-    }
-  ]);
+  const scrollPositions = useRef<Record<string, number>>({});
 
+  const setActiveTab = useCallback((newTab: string) => {
+    scrollPositions.current[activeTab] = window.scrollY;
+    setActiveTabRaw(prev => {
+      if (prev !== newTab) {
+        setTabHistory(h => [...h, prev]);
+      }
+      return newTab;
+    });
+  }, [activeTab]);
+
+  const goBackTab = useCallback((fallback: string) => {
+    scrollPositions.current[activeTab] = window.scrollY;
+    setTabHistory(prev => {
+      if (prev.length === 0) {
+        setActiveTabRaw(fallback);
+        return prev;
+      }
+      const newHistory = [...prev];
+      const last = newHistory.pop()!;
+      setActiveTabRaw(last);
+      return newHistory;
+    });
+  }, [activeTab]);
+
+  const handleRootTabClick = useCallback((tab: string) => {
+    scrollPositions.current[activeTab] = window.scrollY;
+    setTabHistory([]);
+    setActiveTabRaw(tab);
+  }, [activeTab]);
+
+  const [publicDecksFeed, setPublicDecksFeed] = useState<FeedItem[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [messagesTargetUser, setMessagesTargetUser] = useState<{user_id: string; username: string; full_name: string | null; avatar_url: string | null} | null>(null);
   const [activeStudyDeck, setActiveStudyDeck] = useState<string | null>(null);
   const [activeStudyDeckId, setActiveStudyDeckId] = useState<string | null>(null);
   const [isActiveStudyDeckPublic, setIsActiveStudyDeckPublic] = useState<boolean>(false);
@@ -110,6 +100,10 @@ export default function App() {
   const [showAiAssistant, setShowAiAssistant] = useState<boolean>(false);
   const [quickAddDrawerMode, setQuickAddDrawerMode] = useState<"publish" | "deck-only" | null>(null);
   const [feedSubTab, setFeedSubTab] = useState<"ONLY_FOR_YOU" | "FOLLOWING">("ONLY_FOR_YOU");
+
+  // Single post view state
+  const [activePostId, setActivePostId] = useState<string | null>(null);
+  const [activePostOpenComments, setActivePostOpenComments] = useState<boolean>(false);
 
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     const stored = localStorage.getItem("study-lab-theme");
@@ -126,6 +120,35 @@ export default function App() {
     }
     localStorage.setItem("study-lab-theme", isDarkMode ? "dark" : "light");
   }, [isDarkMode]);
+
+  // Fetch real decks and merge with any locally-stored UI metadata
+  const fetchDecksData = useCallback(() => {
+    setDecksLoading(true);
+    getDecks()
+      .then(async (apiDecks) => {
+        const mappedDecks = await Promise.all(
+          apiDecks.map(async (d) => {
+            const mapped = mapApiDeckToStudyDeck(d);
+            try {
+              const apiCards = await getDeckCards(mapped.id);
+              mapped.cards = apiCards.map(c => ({
+                id: c.card_id,
+                question: c.front_text,
+                answer: c.back_text,
+              }));
+            } catch (e) {
+              console.error(`Failed to load cards for deck ${mapped.id}`, e);
+            }
+            return mapped;
+          })
+        );
+        setDecks(mappedDecks);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch decks", err);
+      })
+      .finally(() => setDecksLoading(false));
+  }, []);
 
   // Bootstrap: load user profile + real decks from the backend when authenticated
   useEffect(() => {
@@ -148,180 +171,36 @@ export default function App() {
       });
 
     // Fetch real decks and merge with any locally-stored UI metadata
-    getDecks()
-      .then((apiDecks) => {
-        const mapped = apiDecks.map((d) => mapApiDeckToStudyDeck(d));
-        setDecks(mapped);
+    fetchDecksData();
+
+    // Fetch trending public decks for the "DECKS" feed toggle
+    getTrendingDecks(10)
+      .then((trending) => {
+        const mapped: FeedItem[] = trending.map(d => ({
+          id: d.deck_id,
+          category: "DECK",
+          title: d.title,
+          content: d.description || "",
+          likes: d.like_count,
+          likedByUser: d.is_liked,
+          timeLabel: "recent",
+          authorName: d.owner_full_name || d.owner_username || "Anonymous",
+          authorUsername: d.owner_username || "anonymous",
+          authorId: d.owner_id,
+          authorAvatarUrl: d.owner_avatar_url || undefined,
+          tags: (d.tags && d.tags.length > 0) ? d.tags : (d.category ? [d.category.toLowerCase(), "study", "deck"] : ["study", "deck"]),
+        }));
+        setPublicDecksFeed(mapped);
       })
-      .catch(() => {
-        // Keep mock decks if fetch fails (offline fallback)
-      })
-      .finally(() => setDecksLoading(false));
+      .catch(console.error);
+
   }, [isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // User Profile metadata — derived from real API once loaded
   const userEmail = currentUser?.email ?? "";
 
   // Initial database/state for Decks matching screens
-  const [decks, setDecks] = useState<StudyDeck[]>([
-    {
-      id: "deck-1",
-      category: "SYSTEMS",
-      title: "Systems Architecture",
-      description: "Distributed systems, microservices, and high-availability design patterns.",
-      progress: 65,
-      cardCount: 3,
-      iconType: "terminal",
-      active: true,
-      cards: [
-        {
-          id: "card-sa-1",
-          question: "Describe the primary difference between gRPC and REST regarding network payloads.",
-          answer: "gRPC utilizes Protocol Buffers (Protobuf) for binary serialization, resulting in highly compacted payloads. REST primarily relies on JSON strings, introducing higher parsing cycles and increased package overhead.",
-          details: "Protobuf contracts (proto files) skip structural field transmissions on the wire by mapping indexes directly."
-        },
-        {
-          id: "card-sa-2",
-          question: "Explain the concept of 'Backpressure' in asynchronous messaging pipelines.",
-          answer: "A flow-control mechanism where a slow downstream reader signals an upstream writer to buffer, delay, or throttle transfers. This prevents consumer memory saturation.",
-          details: "Implemented natively in systems via TCP window adjustments, reactive streams, or token buckets."
-        },
-        {
-          id: "card-sa-3",
-          question: "What is the CAP Theorem trade-off during a continuous network division or partition?",
-          answer: "A distributed structure must choose between Consistency (all nodes see synchronized data states) or Availability (all nodes return immediate answers even if stale). Both cannot be guaranteed.",
-          details: "Under partition (P), consistency (C) requires refusing writes to isolated nodes, thereby breaking availability (A)."
-        }
-      ]
-    },
-    {
-      id: "deck-2",
-      category: "WEB",
-      title: "ECMAScript Internals",
-      description: "V8 engine, garbage collection, optimization techniques, and event loop mechanics.",
-      progress: 12,
-      cardCount: 2,
-      iconType: "terminal",
-      cards: [
-        {
-          id: "card-es-1",
-          question: "What is the primary role of the V8 engine's Ignition interpreter and TurboFan compiler?",
-          answer: "Ignition compiles JS source code to bytecode, executing it immediately. When routines run frequently (hot paths), TurboFan takes the bytecode and compiles it into highly optimized native machine code.",
-          details: "If type assumptions fail later, V8 can deoptimize and drop back to interpreted bytecode."
-        },
-        {
-          id: "card-es-2",
-          question: "Describe V8 Garbage Collection's two generational spaces.",
-          answer: "V8 separates the heap into a Nursery/Young generation (for short-lived objects, collected using an active Scavenger copying algorithm) and an Old Generation (for long-lived objects, collected via Sweep-Compact).",
-          details: "The generational hypothesis states that most objects die or become unreachable very quickly after creation."
-        }
-      ]
-    },
-    {
-      id: "deck-3",
-      category: "DATA",
-      title: "PostgreSQL Optimization",
-      description: "Index tuning, lock types, EXPLAIN ANALYZE execution pipelines, and vacuuming strategies.",
-      progress: 88,
-      cardCount: 2,
-      iconType: "database",
-      cards: [
-        {
-          id: "card-pg-1",
-          question: "How does the Postgres index process handle VACUUM commands?",
-          answer: "VACUUM reclaims storage from stale row variants (dead tuples) created by updates or deletions and updates the database statistics. It does not compress indexes unless VACUUM FULL is called.",
-          details: "Autovacuum runs in the background to prevent transaction ID wraparound and table bloat issues."
-        },
-        {
-          id: "card-pg-2",
-          question: "What is the difference between an Index Scan and an Index Only Scan in PostgreSQL?",
-          answer: "An Index Scan looks up pointers in the index and then reads target blocks from the table heap. An Index Only Scan retrieves all requested columns directly from the index itself, avoiding heap reads completely.",
-          details: "An Index Only Scan still refers to the visibility map to verify page visibility without visiting the heap."
-        }
-      ]
-    },
-    {
-      id: "deck-4",
-      category: "SECURITY",
-      title: "Cybersecurity Protocols",
-      description: "OAuth2 flow delegation, JWT hardening practices, cryptographic keys, and token mitigation.",
-      progress: 45,
-      cardCount: 2,
-      iconType: "security",
-      cards: [
-        {
-          id: "card-sec-1",
-          question: "Explain the security difference between the Authorization Code flow and the Implicit flow in OAuth2.",
-          answer: "Authorization Code flow returns an authorization code via front-channel redirect, which is then exchanged for an access token back-channel (server-to-server), protecting the token from browser exposure. Implicit flow returns the token directly in the browser fragment, risking leakage.",
-          details: "Implicit flow has been deprecated by OAuth 2.1 in favor of Authorization Code with PKCE."
-        },
-        {
-          id: "card-sec-2",
-          question: "What is JWT Token hijacking and how does Token Rotation mitigate it?",
-          answer: "Hijacking is when a packet or device leak exposes the refresh token. Rotation invalidates old tokens and issues a new refresh-access token pair on every refresh API request, immediately blacklisting any reuse from anomalous concurrent sessions.",
-          details: "If a leaked old refresh token is reused, the auth server detects the duplicate and revokes the entire lineage."
-        }
-      ]
-    },
-    {
-      id: "deck-jokes",
-      category: "Jokes",
-      title: "Developer Humor",
-      description: "A library of funny computer science puns and programmer developer jokes.",
-      progress: 60,
-      cardCount: 3,
-      iconType: "brain",
-      cards: [
-        {
-          id: "joke-c-1",
-          question: "Why do programmers wear glasses?",
-          answer: "Because they can't C#.",
-          details: "A classic pun referencing Microsoft's C# language and visual acuity."
-        },
-        {
-          id: "joke-c-2",
-          question: "How many programmers does it take to change a light bulb?",
-          answer: "None, that is a hardware issue.",
-          details: "Software engineers usually don't deal with physical hardware components."
-        },
-        {
-          id: "joke-c-3",
-          question: "What is a programmer's favorite hangout place?",
-          answer: "Foo Bar.",
-          details: "Foo and Bar are standard placeholder names (metasyntactic variables) in computer science."
-        }
-      ]
-    },
-    {
-      id: "deck-riddles",
-      category: "Riddles",
-      title: "Logic Riddles",
-      description: "Clever riddles and logical math puzzles to sharpen your debugging brain.",
-      progress: 40,
-      cardCount: 3,
-      iconType: "science",
-      cards: [
-        {
-          id: "riddle-c-1",
-          question: "I have keys but open no locks. I have space but no room. You can enter but can't go outside. What am I?",
-          answer: "A Keyboard!",
-          details: "Contains keys (letters/numbers), a space bar, and an Enter key."
-        },
-        {
-          id: "riddle-c-2",
-          question: "The more of them you take, the more you leave behind. What are they?",
-          answer: "Footsteps!",
-          details: "Walking forward leaves footsteps behind you."
-        },
-        {
-          id: "riddle-c-3",
-          question: "What has a head and a tail but no body?",
-          answer: "A coin.",
-          details: "A standard two-sided coin."
-        }
-      ]
-    }
-  ]);
+  const [decks, setDecks] = useState<StudyDeck[]>([]);
 
   // General workbench study stats
   const [stats, setStats] = useState<StudyStats>({
@@ -376,160 +255,88 @@ export default function App() {
   ]);
 
   // Original curated concept cards matching exact screenshot layout elements
-  const [feedItems, setFeedItems] = useState<FeedItem[]>([
-    {
-      id: "post-1",
-      category: "The Principle of Atomic Habits",
-      title: "",
-      content: '"Small changes often appear to make no difference until you cross a critical threshold."',
-      likes: 1200,
-      likedByUser: false,
-      bookmarkedByUser: false,
-      timeLabel: "08:42 AM",
-      authorName: "James Clear",
-      authorUsername: "@james_clear",
-      authorAvatar: "JC",
-      isFollowed: false,
-      tags: ["habits", "behavior", "systems"],
-    },
-    {
-      id: "post-2",
-      category: "PROGRAMMING",
-      title: "Asynchronous Logic in Rust",
-      content: "Futures in Rust are poll-based rather than completion-based. This architectural choice minimizes the runtime overhead, making it ideal for high-performance systems.",
-      codeSnippet: "fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output>;",
-      likes: 842,
-      likedByUser: false,
-      bookmarkedByUser: false,
-      timeLabel: "YESTERDAY",
-      authorName: "Alex Chen",
-      authorUsername: "@alexchen",
-      authorAvatar: "AC",
-      isFollowed: true,
-      tags: ["rust", "async", "programming"],
-    },
-    {
-      id: "post-3",
-      category: "Visual Identity",
-      title: "Simplicity is the ultimate sophistication.",
-      content: '"Simplicity is the ultimate sophistication."',
-      imageUrl: "https://lh3.googleusercontent.com/aida-public/AB6AXuBCX9-3Jpxb-olaTAWgu5xBFtvDj2Qc4jz_-qcTXp62ZO_wuUswhVRukfZw9nV25AUjZ52CH6Afxpg45BKLdNaqM4C02zxkkdvToIC7CUR-Mn3_ekspweNCZxSC0ZBuSPBXnuJVKvBIAZn9PPHFtTyV1Kl_t6OKNRgeX3oMUAULy2bQxl1aHmjGgi01oRNvKYPJGmUdEzorbQWjLMKuKi3VDmsuU0QYoXNLh3EoNr4h0zJAM8Voe9BUUEZcOdLUvxbcjfRN0vr99LKI",
-      likes: 2500,
-      likedByUser: false,
-      bookmarkedByUser: false,
-      timeLabel: "OCT 24",
-      authorName: "Sophia Lind",
-      authorUsername: "@sophialind",
-      authorAvatar: "SL",
-      isFollowed: false,
-      tags: ["design", "minimalism", "grid"],
-    },
-    {
-      id: "post-4",
-      category: "Philosophy of Science",
-      title: "",
-      content: "The best way to predict the future is to invent it.",
-      quoteAuthor: "— Alan Kay",
-      likes: 512,
-      likedByUser: false,
-      bookmarkedByUser: false,
-      timeLabel: "2 DAYS AGO",
-      isQuoteStyle: true,
-      authorName: "Alan Kay",
-      authorUsername: "@alan_kay",
-      authorAvatar: "AK",
-      isFollowed: true,
-      tags: ["oop", "computing", "philosophy"],
-    },
-    {
-      id: "joke-post-1",
-      category: "JOKES",
-      title: "Binary Humor",
-      content: "There are only 10 types of people in the world: those who understand binary, and those who don't.",
-      likes: 721,
-      likedByUser: false,
-      bookmarkedByUser: false,
-      isPrivate: false,
-      timeLabel: "3 hours ago",
-      authorName: "Dev Grump",
-      authorUsername: "@dev_grump",
-      authorAvatar: "DG",
-      isFollowed: false,
-      tags: ["joke", "binary", "cs-puns"],
-    },
-    {
-      id: "riddle-post-1",
-      category: "RIDDLES",
-      title: "The Silent Truth",
-      content: "What is so fragile that saying its name breaks it?",
-      quoteAuthor: "TAP TO REVEAL: Silence",
-      isQuoteStyle: true,
-      likes: 512,
-      likedByUser: false,
-      bookmarkedByUser: false,
-      isPrivate: false,
-      timeLabel: "YESTERDAY",
-      authorName: "Riddle Maker",
-      authorUsername: "@riddler",
-      authorAvatar: "RM",
-      isFollowed: false,
-      tags: ["riddle", "silence", "puzzles"],
-    },
-    {
-      id: "joke-post-2",
-      category: "JOKES",
-      title: "Clean Code",
-      content: "Why do programmers prefer dark mode?\n\nBecause light attracts bugs!",
-      likes: 889,
-      likedByUser: false,
-      bookmarkedByUser: false,
-      isPrivate: true,
-      timeLabel: "Just now",
-      authorName: "CleanCoder",
-      authorUsername: "@cleancoder",
-      authorAvatar: "CC",
-      isFollowed: true,
-      tags: ["joke", "darkmode", "debugging"],
-    }
-  ]);
+  const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
 
   // AI assistant messaging dialog flow
   const [aiMessages, setAiMessages] = useState<{ sender: "user" | "bot"; text: string }[]>([
     { sender: "bot", text: "STUDY_LAB neural companion online. Submit research query or ask about system logs." }
   ]);
   const [aiInput, setAiInput] = useState<string>("");
-  const handleToggleLike = useCallback((id: string) => {
-    setFeedItems(prev => prev.map(item => {
-      if (item.id === id) {
-        return {
-          ...item,
-          likedByUser: !item.likedByUser,
-        };
-      }
-      return item;
-    }));
+
+  const handleDeletePost = useCallback(async (id: string) => {
+    try {
+      await deletePost(id);
+      setFeedItems(prev => prev.filter(item => item.id !== id));
+    } catch (e) {
+      console.error("Failed to delete post", e);
+    }
   }, []);
 
-  const handleToggleBookmark = useCallback((id: string) => {
-    setFeedItems(prev => prev.map(item => {
-      if (item.id === id) {
-        return {
-          ...item,
-          bookmarkedByUser: !item.bookmarkedByUser,
-        };
+  const handleToggleLike = useCallback(async (id: string) => {
+    const postItem = feedItems.find(x => x.id === id);
+    if (postItem) {
+      setFeedItems(prev => prev.map(item =>
+        item.id === id ? { ...item, likedByUser: !item.likedByUser, likes: item.likedByUser ? item.likes - 1 : item.likes + 1 } : item
+      ));
+      try {
+        if (postItem.likedByUser) await unlikePost(id);
+        else await likePost(id);
+      } catch (e) {
+        setFeedItems(prev => prev.map(item =>
+          item.id === id ? { ...item, likedByUser: !item.likedByUser, likes: item.likedByUser ? item.likes - 1 : item.likes + 1 } : item
+        ));
       }
-      return item;
-    }));
-  }, []);
+      return;
+    }
 
-  const handleToggleFollow = useCallback((authorUsername: string) => {
+    const deckItem = publicDecksFeed.find(x => x.id === id);
+    if (deckItem) {
+      setPublicDecksFeed(prev => prev.map(item =>
+        item.id === id ? { ...item, likedByUser: !item.likedByUser, likes: item.likedByUser ? item.likes - 1 : item.likes + 1 } : item
+      ));
+      try {
+        if (deckItem.likedByUser) await unlikeDeck(id);
+        else await likeDeck(id);
+      } catch (e) {
+        setPublicDecksFeed(prev => prev.map(item =>
+          item.id === id ? { ...item, likedByUser: !item.likedByUser, likes: item.likedByUser ? item.likes - 1 : item.likes + 1 } : item
+        ));
+      }
+    }
+  }, [feedItems, publicDecksFeed]);
+
+  const handleToggleBookmark = useCallback(async (id: string) => {
+    // Optimistic update
+    setFeedItems(prev => prev.map(item =>
+      item.id === id ? { ...item, bookmarkedByUser: !item.bookmarkedByUser } : item
+    ));
+    try {
+      const item = feedItems.find(x => x.id === id);
+      if (item?.bookmarkedByUser) {
+        await removeBookmark(id);
+      } else {
+        await bookmarkPost(id);
+      }
+    } catch (e) {
+      // Rollback on failure
+      setFeedItems(prev => prev.map(item =>
+        item.id === id ? { ...item, bookmarkedByUser: !item.bookmarkedByUser } : item
+      ));
+    }
+  }, [feedItems]);
+
+  const handleToggleFollow = useCallback(async (authorUsername: string) => {
     let authorName = authorUsername;
+    let targetAuthorId: string | undefined = undefined;
     let isNowFollowed = false;
+    let wasFollowed = false;
     
     setFeedItems(prev => {
       const targetItem = prev.find(item => item.authorUsername === authorUsername);
       if (targetItem) {
         authorName = targetItem.authorName || authorName;
+        targetAuthorId = targetItem.authorId;
+        wasFollowed = !!targetItem.isFollowed;
         isNowFollowed = !targetItem.isFollowed;
       }
       return prev.map(item => {
@@ -542,6 +349,26 @@ export default function App() {
         return item;
       });
     });
+
+    if (targetAuthorId) {
+      try {
+        if (wasFollowed) {
+          await unfollowUser(targetAuthorId);
+        } else {
+          await followUser(targetAuthorId);
+        }
+      } catch (e) {
+        console.error("Failed to toggle follow status", e);
+        // Rollback on failure
+        setFeedItems(prev => prev.map(item => {
+          if (item.authorUsername === authorUsername) {
+            return { ...item, isFollowed: wasFollowed };
+          }
+          return item;
+        }));
+        return; // Don't show log if failed
+      }
+    }
 
     const followAlert: SystemLog = {
       id: `alert-follow-${Date.now()}`,
@@ -558,7 +385,7 @@ export default function App() {
 
   const handleImportSharedDeck = useCallback((newDeck: StudyDeck) => {
     setDecks(prev => {
-      const exists = prev.some(d => d.title.toLowerCase() === newDeck.title.toLowerCase());
+      const exists = prev.some(d => d.id === newDeck.id || d.title.toLowerCase() === newDeck.title.toLowerCase());
       if (exists) return prev;
       return [...prev, newDeck];
     });
@@ -634,6 +461,49 @@ export default function App() {
     });
   }, []);
 
+  // Load feed from backend
+  const loadFeed = useCallback(async () => {
+    try {
+      const data = await getForYouFeed(0, 30);
+      const mapped: FeedItem[] = data.map((p: PostResponse) => ({
+        id: p.post_id,
+        category: p.category || p.content_type || "CONCEPT",
+        title: p.title || "",
+        content: p.body,
+        codeSnippet: p.code_snippet || undefined,
+        imageUrl: p.image_url || undefined,
+        likes: p.likes_count,
+        likedByUser: p.is_liked,
+        bookmarkedByUser: p.is_bookmarked,
+        timeLabel: new Date(p.created_at).toLocaleDateString(),
+        isPrivate: p.is_private,
+        authorName: p.author_full_name || p.author_username || "Unknown",
+        authorUsername: p.author_username ? `@${p.author_username}` : "@unknown",
+        authorId: p.author_id,
+        authorAvatar: (p.author_full_name || p.author_username || "?").substring(0, 2).toUpperCase(),
+        authorAvatarUrl: p.author_avatar_url || undefined,
+        isFollowed: p.is_followed,
+        tags: [],
+        commentsCount: p.comments_count,
+      }));
+      // Prepend mock items for demo flavour but put real posts first
+      setFeedItems(prev => {
+        const mockItems = prev.filter(i => !i.id.startsWith("post-") ? false : true);
+        const existingIds = new Set(mapped.map(m => m.id));
+        const mockOnly = mockItems.filter(m => !existingIds.has(m.id));
+        return [...mapped, ...mockOnly];
+      });
+    } catch (e) {
+      console.warn("Could not load feed from backend, using mock data", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadFeed();
+    }
+  }, [isAuthenticated, loadFeed]);
+
   // Handle addition of a custom feed post
   const handlePublishFeedPost = async (data: ConceptFormData) => {
     if (!data.qContent.trim()) return;
@@ -648,28 +518,58 @@ export default function App() {
     const isJoke = data.qContentType === "JOKE";
     const isFlashcard = data.qContentType === "FLASHCARD";
 
-    const created: FeedItem = {
-      id: `custom-${Date.now()}`,
-      category: isRiddle ? "RIDDLES" : isJoke ? "JOKES" : data.qCategory.toUpperCase(),
-      title: data.qTitle,
-      content: data.qContent,
-      codeSnippet: (isFlashcard || data.qContentType === "CONCEPT") && data.qCode ? data.qCode : undefined,
-      quoteAuthor: isRiddle ? `TAP TO REVEAL: ${data.qCode || "Answer"}` : undefined,
-      isQuoteStyle: isRiddle,
-      likes: 0,
-      likedByUser: false,
-      bookmarkedByUser: false,
-      timeLabel: "JUST NOW",
-      isPrivate: data.qPrivate,
-      authorName: "Sai Bag",
-      authorUsername: "@kolarsaibag",
-      authorAvatar: "SB",
-      isFollowed: true,
-      tags: tagsArray.length > 0 ? tagsArray : undefined,
-    };
-
+    // Persist to backend if publishing
     if (quickAddDrawerMode === "publish") {
-      setFeedItems([created, ...feedItems]);
+      try {
+        const posted = await createPost({
+          content_type: data.qContentType,
+          title: data.qTitle || undefined,
+          body: data.qContent,
+          code_snippet: data.qCode || undefined,
+          category: isRiddle ? "RIDDLES" : isJoke ? "JOKES" : data.qCategory.toUpperCase(),
+          is_private: data.qPrivate,
+          deck_id: data.qDeckId || undefined,
+        });
+        const newItem: FeedItem = {
+          id: posted.post_id,
+          category: posted.category || posted.content_type,
+          title: posted.title || "",
+          content: posted.body,
+          codeSnippet: posted.code_snippet || undefined,
+          likes: 0,
+          likedByUser: false,
+          bookmarkedByUser: false,
+          timeLabel: "JUST NOW",
+          isPrivate: posted.is_private,
+          authorName: currentUser?.full_name || currentUser?.username || "Me",
+          authorUsername: currentUser?.username ? `@${currentUser.username}` : "@me",
+          authorAvatar: (currentUser?.full_name || currentUser?.username || "?").substring(0, 2).toUpperCase(),
+          isFollowed: true,
+          tags: tagsArray.length > 0 ? tagsArray : undefined,
+        };
+        setFeedItems(prev => [newItem, ...prev]);
+      } catch (e) {
+        console.error("Failed to publish post to backend", e);
+        // Fallback: add locally
+        const created: FeedItem = {
+          id: `custom-${Date.now()}`,
+          category: isRiddle ? "RIDDLES" : isJoke ? "JOKES" : data.qCategory.toUpperCase(),
+          title: data.qTitle,
+          content: data.qContent,
+          codeSnippet: (isFlashcard || data.qContentType === "CONCEPT") && data.qCode ? data.qCode : undefined,
+          likes: 0,
+          likedByUser: false,
+          bookmarkedByUser: false,
+          timeLabel: "JUST NOW",
+          isPrivate: data.qPrivate,
+          authorName: "Me",
+          authorUsername: "@me",
+          authorAvatar: "ME",
+          isFollowed: true,
+          tags: tagsArray.length > 0 ? tagsArray : undefined,
+        };
+        setFeedItems(prev => [created, ...prev]);
+      }
     }
 
     // Add to specific deck if chosen
@@ -692,6 +592,7 @@ export default function App() {
             return {
               ...deck,
               cardCount: deck.cardCount + 1,
+              hasChanges: deck.originalDeckId ? true : false,
               cards: [...deck.cards, newCard]
             };
           }
@@ -748,6 +649,7 @@ export default function App() {
           return {
             ...deck,
             cardCount: deck.cardCount + 1,
+            hasChanges: deck.originalDeckId ? true : false,
             cards: [...(deck.cards || []), newCard]
           };
         }
@@ -757,13 +659,7 @@ export default function App() {
       console.error("Failed to save feed card to backend deck", e);
     }
 
-    // Mark corresponding feed item as private/Only for you
-    setFeedItems(prev => prev.map(x => {
-      if (x.id === feedItemId) {
-        return { ...x, isPrivate: true };
-      }
-      return x;
-    }));
+    // The card is saved to a deck, but the original feed post remains visible.
 
     // Trigger log notification
     const deckObj = decks.find(d => d.id === deckId);
@@ -841,13 +737,7 @@ export default function App() {
 
     setDecks(prev => [...prev, newDeck]);
 
-    // Mark corresponding feed item as private/Only for  you
-    setFeedItems(prev => prev.map(x => {
-      if (x.id === feedItemId) {
-        return { ...x, isPrivate: true };
-      }
-      return x;
-    }));
+    // The card is saved to a new deck, but the original feed post remains visible.
 
     // Trigger logs
     const alertNewSave: SystemLog = {
@@ -881,6 +771,7 @@ export default function App() {
         return {
           ...deck,
           cardCount: deck.cardCount + 1,
+          hasChanges: deck.originalDeckId ? true : false,
           cards: [...(deck.cards || []), newCard]
         };
       }
@@ -1014,12 +905,15 @@ export default function App() {
   }
 
   return (
-    <div className="flex min-h-screen bg-black text-[#e5e2e1] font-sans selection:bg-white selection:text-black">
+    <div className="flex min-h-screen w-full max-w-full overflow-x-hidden bg-black text-[#e5e2e1] font-sans selection:bg-white selection:text-black">
       
       {/* Sidebar Navigation (Desktop Only) */}
       <Sidebar 
         activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
+        setActiveTab={(tab) => {
+          handleRootTabClick(tab);
+          setSearchQuery("");
+        }} 
         onStudyNowClick={() => {
           // Use first non-default deck or default deck
           const firstDeck = decks.find(d => !d.title.includes("Today's Review")) || decks[0];
@@ -1032,7 +926,7 @@ export default function App() {
       />
 
       {/* Main Core View Area */}
-      <div className="flex-1 lg:ml-64 flex flex-col min-h-screen">
+      <div className="flex-1 min-w-0 lg:ml-64 flex flex-col min-h-screen relative">
         
         {/* Responsive Header Component */}
         <Header 
@@ -1040,7 +934,7 @@ export default function App() {
           setSearchQuery={setSearchQuery}
           activeTab={activeTab}
           setActiveTab={(tab) => {
-            setActiveTab(tab);
+            handleRootTabClick(tab);
             setSearchQuery(""); // Clear search query on navigation
           }}
           onAddNewClick={() => {
@@ -1060,7 +954,16 @@ export default function App() {
 
         {/* Current Content Canvas */}
         <main className="flex-1">
-          <AnimatePresence mode="wait">
+          <AnimatePresence 
+            mode="wait" 
+            onExitComplete={() => {
+              // Restore scroll position for the incoming tab after exit animation completes
+              window.scrollTo({
+                top: scrollPositions.current[activeTab] || 0,
+                behavior: "instant"
+              });
+            }}
+          >
             <motion.div
               key={activeTab}
               initial={{ opacity: 0, y: 10 }}
@@ -1079,25 +982,35 @@ export default function App() {
               onSaveToNewDeck={handleSaveToNewDeck}
               onRemoveCardFromDeck={handleRemoveCardFromDeck}
               onToggleFollow={handleToggleFollow}
-              onViewProfile={(username) => { setSelectedProfileUsername(username); setActiveTab("user-profile"); }}
+              onViewProfile={(username) => {
+                if (currentUser && (username === currentUser.username || username === `@${currentUser.username}`)) {
+                  setActiveTab("profile");
+                } else {
+                  setSelectedProfileUsername(username); 
+                  setActiveTab("user-profile"); 
+                }
+              }}
               onSearchChange={setSearchQuery}
-              onStudyDeck={(deckName) => {
+              onStudyDeck={(deckName, deckId) => {
                 setActiveStudyDeck(deckName);
-                setActiveStudyDeckId(decks.find(d => d.title === deckName)?.id ?? null);
+                setActiveStudyDeckId(deckId ?? decks.find(d => d.title === deckName)?.id ?? null);
                 setIsActiveStudyDeckPublic(true);
                 setActiveTab("study");
               }}
               feedSubTab={feedSubTab}
               setFeedSubTab={setFeedSubTab}
               isDarkMode={isDarkMode}
+              currentUserId={currentUser?.user_id}
+              currentUsername={currentUser?.username || undefined}
+              onDeletePost={handleDeletePost}
             />
           )}
 
           {activeTab === "explore" && (
             <ExploreView 
-              onStudyDeck={(deckName) => {
+              onStudyDeck={(deckName, deckId) => {
                 setActiveStudyDeck(deckName);
-                setActiveStudyDeckId(decks.find(d => d.title === deckName)?.id ?? null);
+                setActiveStudyDeckId(deckId ?? decks.find(d => d.title === deckName)?.id ?? null);
                 setIsActiveStudyDeckPublic(true);
                 setActiveTab("study");
               }}
@@ -1107,6 +1020,18 @@ export default function App() {
               onSaveCardToDeck={handleSaveExploreCardToDeck}
               onSaveToNewDeck={handleSaveExploreToNewDeck}
               onRemoveCardFromDeck={handleRemoveExploreCardFromDeck}
+              onToggleFollow={handleToggleFollow}
+              onViewProfile={(username) => {
+                if (currentUser && (username === currentUser.username || username === `@${currentUser.username}`)) {
+                  setActiveTab("profile");
+                } else {
+                  setSelectedProfileUsername(username); 
+                  setActiveTab("user-profile"); 
+                }
+              }}
+              isDarkMode={isDarkMode}
+              currentUserId={currentUser?.user_id}
+              currentUsername={currentUser?.username || undefined}
             />
           )}
 
@@ -1116,11 +1041,13 @@ export default function App() {
               stats={stats}
               isDarkMode={isDarkMode}
               decksLoading={decksLoading}
-              onStudyDeck={(deckName) => {
+              onStudyDeck={(deckName, deckId) => {
                 setActiveStudyDeck(deckName);
-                setActiveStudyDeckId(decks.find(d => d.title === deckName)?.id ?? null);
+                setActiveStudyDeckId(deckId ?? decks.find(d => d.title === deckName)?.id ?? null);
                 setIsActiveStudyDeckPublic(false);
+                setActiveTab("study");
               }}
+              onRefreshDecks={fetchDecksData}
               onAddNewCardClick={() => setQuickAddDrawerMode("deck-only")}
               onAddNewDeck={(newDeck) => {
                 setDecks(prev => [...prev, newDeck]);
@@ -1152,12 +1079,44 @@ export default function App() {
 
           {activeTab === "notifications" && (
             <NotificationsView 
-              logs={logs}
-              onToggleRead={handleToggleReadLog}
-              onClearLog={handleClearLog}
-              onMarkAllRead={handleMarkAllRead}
-              onFetchOlderLogs={handleFetchOlderLogs}
+              onOpenUserProfile={(username) => {
+                setSelectedProfileUsername(username);
+                setActiveTab("user-profile");
+              }}
+              onNavigateToDecks={() => setActiveTab("decks")}
+              onOpenPost={(postId, openComments) => {
+                setActivePostId(postId);
+                setActivePostOpenComments(openComments);
+                setActiveTab("post");
+              }}
+              onOpenDeck={(deckId) => {
+                const d = decks.find(dk => dk.id === deckId);
+                if (d) {
+                  setActiveStudyDeck(d.title);
+                  setActiveStudyDeckId(d.id);
+                  setIsActiveStudyDeckPublic(false);
+                  setActiveTab("study");
+                } else {
+                  setActiveStudyDeck("Community Deck");
+                  setActiveStudyDeckId(deckId);
+                  setIsActiveStudyDeckPublic(true);
+                  setActiveTab("study");
+                }
+              }}
+            />
+          )}
+
+          {activeTab === "messages" && (
+            <MessagesView
+              currentUserId={currentUser?.user_id || ""}
               searchQuery={searchQuery}
+              isDarkMode={isDarkMode}
+              targetUser={messagesTargetUser}
+              onClearTargetUser={() => setMessagesTargetUser(null)}
+              onOpenUserProfile={(username) => {
+                setSelectedProfileUsername(username);
+                setActiveTab("user-profile");
+              }}
             />
           )}
 
@@ -1172,18 +1131,44 @@ export default function App() {
 
           {activeTab === "profile" && (
             <ProfileView 
-              userEmail={userEmail} 
+              userEmail={currentUser?.email || "anonymous@node"} 
               currentUser={currentUser}
+              onProfileUpdate={setCurrentUser}
               stats={stats}
               onResetStats={handleResetStats}
               isDarkMode={isDarkMode}
               feedItems={feedItems}
               userDecks={decks}
-              onStudyDeck={(deckName) => {
+              onStudyDeck={(deckName, deckId) => {
                 setActiveStudyDeck(deckName);
-                setActiveStudyDeckId(decks.find(d => d.title === deckName)?.id ?? null);
-                setIsActiveStudyDeckPublic(true);
+                setActiveStudyDeckId(deckId ?? decks.find(d => d.title === deckName)?.id ?? null);
+                setIsActiveStudyDeckPublic(false);
                 setActiveTab("study");
+              }}
+              onDeletePost={handleDeletePost}
+              currentUserId={currentUser?.user_id}
+              currentUsername={currentUser?.username || undefined}
+            />
+          )}
+
+          {activeTab === "post" && activePostId && (
+            <SinglePostView
+              postId={activePostId}
+              autoOpenComments={activePostOpenComments}
+              onClose={() => goBackTab("feed")}
+              currentUserId={currentUser?.user_id || undefined}
+              currentUsername={currentUser?.username || undefined}
+              isDarkMode={isDarkMode}
+              onToggleLike={handleToggleLike}
+              onToggleBookmark={handleToggleBookmark}
+              decks={decks}
+              onSaveCardToDeck={handleSaveCardToDeck as any}
+              onSaveToNewDeck={handleSaveToNewDeck}
+              onRemoveCardFromDeck={handleRemoveCardFromDeck}
+              onDeletePost={handleDeletePost}
+              onOpenUserProfile={(username) => {
+                setSelectedProfileUsername(username);
+                setActiveTab("user-profile");
               }}
             />
           )}
@@ -1193,18 +1178,24 @@ export default function App() {
               username={selectedProfileUsername}
               onClose={() => {
                 setSelectedProfileUsername(null);
-                setActiveTab("feed");
+                goBackTab("feed");
               }}
               feedItems={feedItems}
               userDecks={decks}
               onToggleFollow={handleToggleFollow}
-              onStudyDeck={(deckName) => {
+              onStudyDeck={(deckName, deckId) => {
                 setActiveStudyDeck(deckName);
-                setActiveStudyDeckId(decks.find(d => d.title === deckName)?.id ?? null);
+                setActiveStudyDeckId(deckId ?? decks.find(d => d.title === deckName)?.id ?? null);
                 setIsActiveStudyDeckPublic(true);
                 setActiveTab("study");
               }}
               userEmail={userEmail}
+              currentUserId={currentUser?.user_id}
+              currentUsername={currentUser?.username || undefined}
+              onMessageClick={(user) => {
+                setMessagesTargetUser(user);
+                setActiveTab("messages");
+              }}
             />
           )}
 
@@ -1217,7 +1208,7 @@ export default function App() {
                 setActiveStudyDeck(null);
                 setActiveStudyDeckId(null);
                 setIsActiveStudyDeckPublic(false);
-                setActiveTab("explore");
+                goBackTab("explore");
               }}
               onCardResult={handleCardResult}
               isDarkMode={isDarkMode}
@@ -1248,7 +1239,7 @@ export default function App() {
               <button
                 key={btn.id}
                 onClick={() => {
-                  setActiveTab(btn.id);
+                  handleRootTabClick(btn.id);
                   setSearchQuery("");
                 }}
                 className={`flex flex-col items-center justify-center p-2 text-center flex-1 cursor-pointer transition-all ${
@@ -1267,56 +1258,23 @@ export default function App() {
 
       </div>
 
-      {/* Slide-In AI Assistant Terminal Side-Panel Drawer */}
-      {showAiAssistant && (
-        <div className="fixed inset-y-0 right-0 w-full sm:w-96 bg-black border-l border-[#1A1A1A] z-50 flex flex-col justify-between shadow-2xl animated slideInRight">
-          <header className="p-4 border-b border-[#1A1A1A] flex items-center justify-between bg-surface">
-            <div className="flex items-center gap-2">
-              <TerminalIcon className="w-4 h-4 text-white" />
-              <span className="text-xs font-mono font-bold tracking-wider text-white">INTELLIGENCE TERMINAL</span>
-            </div>
-            <button 
-              onClick={() => setShowAiAssistant(false)}
-              className="text-on-surface-variant hover:text-white p-1"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </header>
-
-          <div className="flex-1 p-4 overflow-y-auto space-y-4">
-            {aiMessages.map((msg, idx) => (
-              <div 
-                key={idx} 
-                className={`p-3 border rounded-xs text-xs space-y-1 ${
-                  msg.sender === "user" 
-                    ? "bg-[#111111] border-[#1a1a1a] text-white ml-6 font-sans text-right" 
-                    : "bg-[#0e0e0e] border-[#1a1a1a] text-on-surface mr-6 font-mono font-light text-left"
-                }`}
-              >
-                {msg.sender === "bot" && (
-                  <span className="text-[9px] text-white font-bold uppercase tracking-widest block">
-                    node-assistant //
-                  </span>
-                )}
-                <p className="leading-relaxed whitespace-pre-line">{msg.text}</p>
-              </div>
-            ))}
-          </div>
-
-          <form onSubmit={handleSendAiMessage} className="p-4 border-t border-[#1A1A1A] bg-[#0e0e0e] flex gap-2">
-            <input
-              type="text"
-              value={aiInput}
-              onChange={(e) => setAiInput(e.target.value)}
-              placeholder="Ask about monads, streaks, or DB index types..."
-              className="flex-1 bg-black text-xs p-2 border border-[#1A1A1A] rounded-xs focus:border-white focus:ring-0 outline-none text-white font-mono"
-            />
-            <button type="submit" className="p-2 bg-white hover:bg-neutral-200 text-black border border-white font-bold rounded-xs cursor-pointer">
-              <Send className="w-4 h-4" />
-            </button>
-          </form>
-        </div>
-      )}
+      {/* ── Phase 5: Real AI Study Companion Panel ── */}
+      <AIChatPanel
+        isOpen={showAiAssistant}
+        onClose={() => setShowAiAssistant(false)}
+        decks={decks}
+        isDarkMode={isDarkMode}
+        onDeckCreated={async (name: string) => {
+          const newDeck = await createDeck(name);
+          return newDeck.deck_id;
+        }}
+        onCardsAdded={async (deckId: string, cards: { front: string; back: string }[]) => {
+          for (const card of cards) {
+            await createCard(deckId, card.front, card.back);
+          }
+        }}
+        onDecksRefresh={fetchDecksData}
+      />
 
       {/* Slide-In Concept Card Publisher Wizard */}
       {quickAddDrawerMode !== null && (
@@ -1339,6 +1297,7 @@ export default function App() {
             setActiveStudyDeck(null);
             setActiveStudyDeckId(null);
             setIsActiveStudyDeckPublic(false);
+            goBackTab("decks");
           }}
           onCardResult={handleCardResult}
           isDarkMode={isDarkMode}

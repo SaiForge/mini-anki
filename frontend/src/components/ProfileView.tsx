@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { 
   User, 
   Flame, 
@@ -11,7 +11,11 @@ import {
   Plus,
   Trash2,
   Clock,
-  BookOpen
+  BookOpen,
+  Camera,
+  Grid,
+  Layers,
+  Settings
 } from "lucide-react";
 import { StudyStats, FeedItem, StudyDeck } from "../types";
 import { FeedCard } from "./cards/FeedCard";
@@ -22,16 +26,21 @@ import { Label } from "./ui/Label";
 import { cn } from "../lib/utils";
 import { UserResponse, updateMe } from "../api/authApi";
 import { getFollowers, getFollowing } from "../api/socialApi";
+import { uploadAvatar, resolveMediaUrl } from "../api/uploadApi";
 
 interface ProfileViewProps {
   userEmail: string;
   currentUser?: UserResponse | null;
+  onProfileUpdate?: (updatedUser: UserResponse) => void;
   stats: StudyStats;
   onResetStats: () => void;
   isDarkMode?: boolean;
   feedItems: FeedItem[];
   userDecks: StudyDeck[];
-  onStudyDeck: (deckName: string) => void;
+  onStudyDeck: (deckName: string, deckId?: string) => void;
+  onDeletePost?: (id: string) => void;
+  currentUserId?: string;
+  currentUsername?: string;
 }
 
 interface ProfileData {
@@ -52,13 +61,20 @@ const AVATAR_PRESETS = [
   { id: "user_original", label: "Original", url: "https://lh3.googleusercontent.com/aida-public/AB6AXuDL6PO85wdDFKsVML2LXXpJBdHNX41Jo4OTHzknvlMQ3o6WwYZ_3DqYVzxckDKH3qd3TYBnhY32-6D3cADyWKHKBGIpUhLFlkt2XL3EHIgrufopv69gtz6WoD59u5ZszSaTVYzpX_84EegyZnAhOXXDIaREBC8m2hcxBzZAQcYLPs3ucyxZKgOaK8XPXNZgzzP2pfctpIQj-qHjjn6swdDzwLtw2glyyma4LaSY79elyfhxg_qTYqHkQhxko-J3VTC2b4GjFMje2FSj" }
 ];
 
-export default function ProfileView({ userEmail, currentUser, stats, onResetStats, isDarkMode = true, feedItems, userDecks, onStudyDeck }: ProfileViewProps) {
+export default function ProfileView({ userEmail, currentUser, onProfileUpdate, stats, onResetStats, isDarkMode = true, feedItems, userDecks, onStudyDeck, onDeletePost, currentUserId, currentUsername }: ProfileViewProps) {
   const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
   const [successMsg, setSuccessMsg] = useState<string>("");
   const [newTagInput, setNewTagInput] = useState<string>("");
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const [activeSubTab, setActiveSubTab] = useState<"POSTS" | "DECKS">("POSTS");
   const [revealedItems, setRevealedItems] = useState<Record<string, boolean>>({});
+  
+  // Lazy loading state
+  const [displayLimit, setDisplayLimit] = useState(10);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   // Filter: public posts are only from the logged-in user (by real username or email handle)
   const myUsername = currentUser?.username
@@ -68,10 +84,29 @@ export default function ProfileView({ userEmail, currentUser, stats, onResetStat
     item => !item.isPrivate && (myUsername ? item.authorUsername === myUsername : false)
   );
 
-  // Filter: public decks exclude private ones and the default "Today's Review" system deck
+  // Filter: public decks are those explicitly marked as public, excluding the default "Today's Review"
   const publicDecks = userDecks.filter(
-    deck => !deck.isPrivate && !deck.title.includes("Today's Review")
+    deck => deck.isPublic && !deck.title.includes("Today's Review")
   );
+
+  useEffect(() => {
+    setDisplayLimit(10); // reset when tab changes
+  }, [activeSubTab]);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setDisplayLimit((prev) => prev + 10);
+        }
+      },
+      { threshold: 0.1 }
+    );
+    if (loadMoreRef.current) {
+      observer.observe(loadMoreRef.current);
+    }
+    return () => observer.disconnect();
+  }, [activeSubTab, publicPosts, publicDecks]);
 
   const handleToggleReveal = (id: string) => {
     setRevealedItems(prev => ({
@@ -84,8 +119,8 @@ export default function ProfileView({ userEmail, currentUser, stats, onResetStat
   // Load custom profile state, seeding from real backend user if available
   const [profile, setProfile] = useState<ProfileData>({
       name: userEmail.split("@")[0],
-      role: "Distributed Systems Architect",
-      bio: "Synthesizing deep asynchronous execution flows, system structures, and reactive algorithms.",
+      role: "Developer",
+      bio: "No biography provided. Click Edit Profile to set up your developer synopsis.",
       avatarUrl: AVATAR_PRESETS[4].url,
       tags: [],
       followers: 0,
@@ -97,27 +132,15 @@ export default function ProfileView({ userEmail, currentUser, stats, onResetStat
     if (!currentUser) return;
     setProfile(prev => ({
       ...prev,
-      name: currentUser.full_name || prev.name,
+      name: currentUser.full_name || currentUser.username || prev.name,
       bio: currentUser.bio || prev.bio,
       avatarUrl: currentUser.profile_picture_url || prev.avatarUrl,
       tags: currentUser.tags || prev.tags,
+      role: currentUser.role || prev.role,
+      followers: currentUser.followers_count !== undefined ? currentUser.followers_count : prev.followers,
+      following: currentUser.following_count !== undefined ? currentUser.following_count : prev.following,
     }));
 
-    const fetchSocialStats = async () => {
-      try {
-        const followersList = await getFollowers(currentUser.user_id);
-        const followingList = await getFollowing(currentUser.user_id);
-        setProfile(p => ({
-          ...p,
-          followers: followersList.length,
-          following: followingList.length
-        }));
-      } catch (e) {
-        console.error("Failed to fetch social network stats", e);
-      }
-    };
-
-    fetchSocialStats();
   }, [currentUser]);
 
   // Keep temporary draft values while editing
@@ -130,24 +153,26 @@ export default function ProfileView({ userEmail, currentUser, stats, onResetStat
     }
   }, [isEditing, profile]);
 
-  const [isSaving, setIsSaving] = useState(false);
-
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     try {
-      await updateMe({
+      const updatedUser = await updateMe({
         full_name: draft.name,
+        role: draft.role,
         bio: draft.bio,
         profile_picture_url: draft.avatarUrl,
         tags: draft.tags,
       });
       setProfile(draft);
+      if (onProfileUpdate) {
+        onProfileUpdate(updatedUser);
+      }
       setIsEditing(false);
       setSuccessMsg("Profile variables stored successfully.");
       setTimeout(() => setSuccessMsg(""), 2000);
-    } catch (error) {
-      console.error("Failed to save profile", error);
+    } catch (err: any) {
+      alert("Failed to update profile: " + (err.response?.data?.detail || err.message));
     } finally {
       setIsSaving(false);
     }
@@ -157,6 +182,29 @@ export default function ProfileView({ userEmail, currentUser, stats, onResetStat
     onResetStats();
     setSuccessMsg("Metrics ledger vacuumed completely.");
     setTimeout(() => setSuccessMsg(""), 2000);
+  };
+
+  // Phase 5: Avatar file upload handler
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingAvatar(true);
+    try {
+      const url = await uploadAvatar(file);
+      const resolved = resolveMediaUrl(url);
+      setProfile(prev => ({ ...prev, avatarUrl: resolved }));
+      setDraft(prev => ({ ...prev, avatarUrl: resolved }));
+      if (onProfileUpdate && currentUser) {
+        onProfileUpdate({ ...currentUser, profile_picture_url: resolved });
+      }
+      setSuccessMsg("Avatar updated successfully.");
+      setTimeout(() => setSuccessMsg(""), 2000);
+    } catch (err: any) {
+      alert("Upload failed: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setIsUploadingAvatar(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+    }
   };
 
   const addTag = () => {
@@ -197,64 +245,112 @@ export default function ProfileView({ userEmail, currentUser, stats, onResetStat
         {!isEditing ? (
           <div className="space-y-6 pt-4">
             
-            {/* Identity line */}
-            <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between gap-5 text-center sm:text-left">
-              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
-                <img 
-                  id="profile-avatar"
-                  alt="Developer Profile Avatar" 
-                  className="w-20 h-20 rounded-full border border-[#1A1A1A] object-cover bg-black relative"
-                  src={profile.avatarUrl}
-                  referrerPolicy="no-referrer"
+            {/* Instagram Style Header */}
+            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 sm:gap-10 text-center sm:text-left">
+              
+              {/* Avatar Column */}
+              <div className="flex-shrink-0">
+                {/* Hidden file input for avatar upload */}
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="hidden"
+                  onChange={handleAvatarUpload}
                 />
-                <div className="pt-2 sm:pt-4 space-y-1">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 justify-center sm:justify-start">
-                    <h2 id="profile-display-name" className="text-lg font-bold text-white font-sans">{profile.name}</h2>
-                    <span className="inline-block self-center sm:self-auto text-[9px] font-mono text-on-surface-variant uppercase font-medium">
-                      STUDENT NODE
-                    </span>
-                  </div>
-                  <p id="profile-role" className="text-xs font-mono text-white tracking-wide uppercase font-semibold">{profile.role}</p>
-                  <p className="text-[11px] font-mono text-on-surface-variant/60">@{currentUser?.username || userEmail.split("@")[0]}</p>
-                </div>
-              </div>
-              <div className="pt-4 sm:pt-0">
-                <button
-                  id="edit-profile-toggle"
-                  onClick={() => setIsEditing(true)}
-                  className="px-3 py-1.5 bg-transparent hover:bg-white/5 text-xs font-sans font-medium text-white border border-[#1A1A1A] hover:border-white/40 rounded-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                <div
+                  className="relative w-24 h-24 sm:w-36 sm:h-36 group cursor-pointer mx-auto sm:mx-0"
+                  onClick={() => avatarInputRef.current?.click()}
+                  title="Click to upload new profile picture"
                 >
-                  <Pencil className="w-3 h-3" />
-                  <span>Edit Profile</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Biography */}
-            <div className="space-y-2 pt-6 mt-6 border-t border-[#1A1A1A]">
-              <h3 className="text-[10px] font-mono uppercase tracking-widest text-on-surface-variant/40">Biography</h3>
-              <p id="profile-bio" className="text-sm text-on-surface-variant leading-relaxed font-light font-sans max-w-2xl">
-                {profile.bio || "No biography provided. Click Edit Profile to set up your developer synopsis."}
-              </p>
-            </div>
-
-            {/* Skills & Domains tags */}
-            <div className="space-y-3 pt-6 mt-6 border-t border-[#1A1A1A]">
-              <h3 className="text-[10px] font-mono uppercase tracking-widest text-on-surface-variant/40">Expertise Domains</h3>
-              {profile.tags.length > 0 ? (
-                <div id="profile-tags-container" className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                  {profile.tags.map((tag, idx) => (
-                    <React.Fragment key={idx}>
-                      <span className="text-xs text-white font-sans font-medium">{tag}</span>
-                      {idx < profile.tags.length - 1 && (
-                        <span className="w-px h-3 bg-[#1A1A1A]"></span>
-                      )}
-                    </React.Fragment>
-                  ))}
+                  <img 
+                    id="profile-avatar"
+                    alt="Developer Profile Avatar" 
+                    className="w-full h-full rounded-full border border-[#1A1A1A] object-cover bg-black"
+                    src={profile.avatarUrl}
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className={`absolute inset-0 rounded-full flex items-center justify-center transition-all ${
+                    isUploadingAvatar
+                      ? "bg-black/60"
+                      : "bg-black/0 group-hover:bg-black/50"
+                  }`}>
+                    {isUploadingAvatar ? (
+                      <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <Camera className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                    )}
+                  </div>
                 </div>
-              ) : (
-                <p className="text-xs text-on-surface-variant/35 italic">No labels or expertise tags added yet.</p>
-              )}
+              </div>
+
+              {/* Info Column */}
+              <div className="flex-1 w-full space-y-4 sm:space-y-5">
+                
+                {/* 1. Full Name and Buttons */}
+                <div className="flex items-start justify-between w-full gap-4">
+                  <h2 id="profile-display-name" className="text-2xl sm:text-3xl font-bold text-white font-sans truncate flex items-baseline justify-center sm:justify-start gap-3">
+                    {profile.name}
+                    <span className="font-medium text-zinc-400 uppercase text-xs tracking-wider">{profile.role}</span>
+                  </h2>
+                  <button
+                    id="edit-profile-toggle"
+                    onClick={() => setIsEditing(true)}
+                    className="p-2 -mr-2 sm:mr-0 hover:bg-[#262626] text-zinc-400 hover:text-white rounded-lg transition-all flex-shrink-0"
+                    title="Edit Profile"
+                  >
+                    <Pencil className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* 2. Username */}
+                <div className="text-center sm:text-left text-base text-zinc-400 font-sans font-medium -mt-2">
+                  @{currentUser?.username || userEmail.split("@")[0]}
+                </div>
+
+                {/* 3. Stats Row */}
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-6 gap-y-3 pt-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-white font-sans text-base">{publicPosts.length}</span>
+                    <span className="text-[15px] text-zinc-300 font-sans">posts</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-white font-sans text-base">{publicDecks.length}</span>
+                    <span className="text-[15px] text-zinc-300 font-sans">decks</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-white font-sans text-base">{profile.followers}</span>
+                    <span className="text-[15px] text-zinc-300 font-sans">followers</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-white font-sans text-base">{profile.following}</span>
+                    <span className="text-[15px] text-zinc-300 font-sans">following</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-white font-sans text-base">{currentUser?.current_streak ?? stats.dailyStreak}</span>
+                    <span className="text-[15px] text-zinc-300 font-sans flex items-center gap-1"><Flame className="w-4 h-4 text-orange-500" /> streak</span>
+                  </div>
+                </div>
+
+                {/* 4. Bio Section */}
+                <div className="space-y-3 text-sm font-sans pt-2">
+                  <p className="text-white whitespace-pre-wrap max-w-lg mx-auto sm:mx-0 text-center sm:text-left text-[15px] leading-relaxed">
+                    {profile.bio || "No biography provided. Click Edit Profile to set up your developer synopsis."}
+                  </p>
+                  
+                  {/* 5. Expertise Tags */}
+                  {profile.tags.length > 0 && (
+                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-2 gap-y-2 pt-2">
+                      {profile.tags.map((tag, idx) => (
+                        <span key={idx} className="text-xs text-blue-300 hover:text-blue-200 font-sans cursor-pointer transition-colors bg-[#112240] border border-[#233554] px-2.5 py-1 rounded-md">
+                          #{tag.replace(/\s+/g, '')}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+              </div>
             </div>
 
           </div>
@@ -273,6 +369,7 @@ export default function ProfileView({ userEmail, currentUser, stats, onResetStat
                   size="sm"
                   isDarkMode={isDarkMode}
                   onClick={() => setIsEditing(false)}
+                  disabled={isSaving}
                   className="flex items-center gap-1"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -466,92 +563,73 @@ export default function ProfileView({ userEmail, currentUser, stats, onResetStat
       </div>
 
       
-      {/* Real-time Counts/Metrics styled like ProfileView tags */}
-      <div className="space-y-3 pt-6 mt-6 border-t border-[#1A1A1A]">
-        <h3 className="text-[10px] font-mono uppercase tracking-widest text-on-surface-variant/40">Network Stats</h3>
-        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-5 gap-y-2">
-          <div className="flex items-center gap-1.5">
-            <Flame className="w-4 h-4 text-orange-500" />
-            <span className="text-xs text-white font-sans font-medium">
-              {currentUser?.current_streak ?? stats.dailyStreak} Days Streak
-            </span>
-          </div>
-          <span className="hidden sm:block w-px h-3 bg-[#1A1A1A]"></span>
-          <div className="flex items-center gap-1.5">
-            <Users className="w-4 h-4 text-zinc-500" />
-            <span className="text-xs text-white font-sans font-medium">
-              {profile.followers >= 1000 ? `${(profile.followers / 1000).toFixed(1)}k` : profile.followers} Followers
-            </span>
-          </div>
-          <span className="hidden sm:block w-px h-3 bg-[#1A1A1A]"></span>
-          <div className="flex items-center gap-1.5">
-            <BookOpen className="w-4 h-4 text-zinc-500" />
-            <span className="text-xs text-white font-sans font-medium">{profile.following} Following</span>
-          </div>
-          {currentUser?.email && (
-            <>
-              <span className="hidden sm:block w-px h-3 bg-[#1A1A1A]"></span>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-mono text-on-surface-variant/50">{currentUser.email}</span>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Tab Selector: Public Posts vs Public Decks */}
-      <div className="space-y-6 pt-6 mt-6 border-t border-[#1A1A1A]">
-        <div className="flex items-center gap-6 border-b border-[#1c1c1c] pb-2">
+      {/* Tab Selector: Instagram Style */}
+      <div className="border-t border-[#1a1a1a] mt-10">
+        <div className="flex items-center justify-center gap-12 sm:gap-16">
           <button
             onClick={() => setActiveSubTab("POSTS")}
-            className={`pb-2 text-xs font-sans font-medium transition-all cursor-pointer border-b-2 relative ${
+            className={`flex items-center gap-2 py-4 text-xs font-sans font-bold tracking-widest uppercase transition-colors border-t border-transparent relative -top-px ${
               activeSubTab === "POSTS"
                 ? "border-white text-white"
-                : "border-transparent text-zinc-500 hover:text-zinc-300"
+                : "text-zinc-500 hover:text-zinc-300"
             }`}
           >
-            Public Concepts ({publicPosts.length})
+            <Grid className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Concepts</span>
           </button>
           <button
             onClick={() => setActiveSubTab("DECKS")}
-            className={`pb-2 text-xs font-sans font-medium transition-all cursor-pointer border-b-2 relative ${
+            className={`flex items-center gap-2 py-4 text-xs font-sans font-bold tracking-widest uppercase transition-colors border-t border-transparent relative -top-px ${
               activeSubTab === "DECKS"
                 ? "border-white text-white"
-                : "border-transparent text-zinc-500 hover:text-zinc-300"
+                : "text-zinc-500 hover:text-zinc-300"
             }`}
           >
-            Public Decks ({publicDecks.length})
+            <Layers className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Decks</span>
           </button>
         </div>
+      </div>
 
-        {/* TAB CONTENTS */}
-        <div className="max-h-[340px] overflow-y-auto pr-2 scrollbar-thin">
-          {activeSubTab === "POSTS" ? (
-            <div className="space-y-4">
-              {publicPosts.length === 0 ? (
-                <p className="text-xs text-on-surface-variant/35 italic">No public lab concepts detected.</p>
-              ) : (
-                publicPosts.map((post) => (
-                  <FeedCard
-                    key={post.id}
-                    isDarkMode={true}
-                    viewMode="feed"
-                    feedItem={post}
-                    isSingle={false}
-                    hideHeader={true}
-                    currentStep={revealedItems[post.id] ? 2 : 0}
-                    maxSteps={2}
-                    onToggleReveal={() => handleToggleReveal(post.id)}
-                  />
-                ))
-              )}
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {publicDecks.length === 0 ? (
-                <p className="text-xs text-on-surface-variant/35 italic">No public recall decks registered.</p>
-              ) : (
-                publicDecks.map((deck) => (
+      {/* TAB CONTENTS */}
+      <div className="mt-4 pb-32">
+        {activeSubTab === "POSTS" ? (
+          <div className="space-y-4 pb-4">
+            {publicPosts.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 opacity-50">
+                <Grid className="w-12 h-12 mb-4" />
+                <p className="text-sm font-sans">No concepts published yet.</p>
+              </div>
+            ) : (
+              publicPosts.slice(0, displayLimit).map((post) => (
+                <FeedCard
+                  key={post.id}
+                  isDarkMode={true}
+                  viewMode="feed"
+                  feedItem={post}
+                  isSingle={false}
+                  hideHeader={true}
+                  currentStep={revealedItems[post.id] ? 2 : 0}
+                  maxSteps={2}
+                  onToggleReveal={() => handleToggleReveal(post.id)}
+                  onDeletePost={onDeletePost}
+                  currentUsername={currentUser?.username || undefined}
+                />
+              ))
+            )}
+            {publicPosts.length > displayLimit && (
+               <div ref={loadMoreRef} className="py-6 text-center text-xs text-zinc-500 font-mono flex justify-center"><div className="w-4 h-4 border-2 border-zinc-700 border-t-white rounded-full animate-spin" /></div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4 pb-4">
+            {publicDecks.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 opacity-50">
+                <Layers className="w-12 h-12 mb-4" />
+                <p className="text-sm font-sans">No decks published yet.</p>
+              </div>
+            ) : (
+              publicDecks.slice(0, displayLimit).map((deck) => (
                   <div 
                     key={deck.id}
                     className="p-5 border border-[#1a1a1a] bg-zinc-950/20 rounded hover:border-zinc-800 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4"
@@ -582,7 +660,7 @@ export default function ProfileView({ userEmail, currentUser, stats, onResetStat
                     <div className="flex flex-row sm:flex-col gap-2 flex-shrink-0 sm:items-end">
                       <button
                         onClick={() => {
-                          onStudyDeck(deck.title);
+                          onStudyDeck(deck.title, deck.id);
                         }}
                         className="bg-white hover:bg-zinc-200 text-black text-xs font-mono px-3 py-1.5 rounded-xs transition-colors flex items-center gap-1 cursor-pointer font-bold"
                       >
@@ -593,13 +671,11 @@ export default function ProfileView({ userEmail, currentUser, stats, onResetStat
                   </div>
                 ))
               )}
+              {publicDecks.length > displayLimit && (
+                 <div ref={loadMoreRef} className="py-6 text-center text-xs text-zinc-500 font-mono flex justify-center"><div className="w-4 h-4 border-2 border-zinc-700 border-t-white rounded-full animate-spin" /></div>
+              )}
             </div>
           )}
-        </div>
-      </div>
-
-
-
-    </div>
+        </div>    </div>
   );
 }

@@ -10,6 +10,14 @@ export interface ApiDeck {
   created_at: string;
   is_default: number;
   card_count: number;
+  is_public?: boolean;
+  description?: string;
+  category?: string;
+  tags?: string[];
+  fork_count?: number;
+  like_count?: number;
+  original_deck_id?: string;
+  has_changes?: boolean;
 }
 
 export interface ApiCard {
@@ -59,8 +67,8 @@ export function mapApiDeckToStudyDeck(
 ): StudyDeck {
   const stored = loadDeckMeta(apiDeck.deck_id);
   const meta: DeckLocalMeta = {
-    category: overrideMeta?.category ?? stored?.category ?? "GENERAL",
-    description: overrideMeta?.description ?? stored?.description ?? "",
+    category: apiDeck.category ?? overrideMeta?.category ?? stored?.category ?? "GENERAL",
+    description: apiDeck.description ?? overrideMeta?.description ?? stored?.description ?? "",
     iconType: overrideMeta?.iconType ?? stored?.iconType ?? "terminal",
     isPrivate: overrideMeta?.isPrivate ?? stored?.isPrivate ?? false,
     progress: overrideMeta?.progress ?? stored?.progress ?? 0,
@@ -79,9 +87,12 @@ export function mapApiDeckToStudyDeck(
     description: meta.description,
     iconType: meta.iconType,
     isPrivate: meta.isPrivate,
+    isPublic: apiDeck.is_public ?? false,
     progress: meta.progress,
     cardCount: apiDeck.card_count,
     tags: meta.tags,
+    originalDeckId: apiDeck.original_deck_id,
+    hasChanges: apiDeck.has_changes,
     cards: [], // Cards are loaded separately during study session
   };
 }
@@ -93,8 +104,25 @@ export async function getDecks(): Promise<ApiDeck[]> {
   return data;
 }
 
-export async function createDeck(title: string): Promise<ApiDeck> {
-  const { data } = await axiosClient.post<ApiDeck>("/api/decks/", { title });
+export async function getPublicUserDecks(userId: string): Promise<ApiDeck[]> {
+  const { data } = await axiosClient.get<ApiDeck[]>(`/api/decks/user/${userId}/public`);
+  return data;
+}
+
+export async function createDeck(
+  title: string,
+  description?: string,
+  category?: string,
+  is_public?: boolean,
+  tags?: string[]
+): Promise<ApiDeck> {
+  const { data } = await axiosClient.post<ApiDeck>("/api/decks/", { 
+    title,
+    description,
+    category,
+    tags,
+    is_public
+  });
   return data;
 }
 
@@ -112,5 +140,14 @@ export async function createCard(
     `/api/decks/${deckId}/cards`,
     { front_text, back_text }
   );
+  return data;
+}
+
+export async function deleteCard(deckId: string, cardId: string): Promise<void> {
+  await axiosClient.delete(`/api/decks/${deckId}/cards/${cardId}`);
+}
+
+export async function getDeckCards(deckId: string): Promise<ApiCard[]> {
+  const { data } = await axiosClient.get<ApiCard[]>(`/api/decks/${deckId}/cards`);
   return data;
 }

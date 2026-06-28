@@ -6,6 +6,7 @@ from app.models.all_models import User, Follow
 from app.api.deps import get_current_user
 from app.schemas.user_schema import PublicUserResponse
 from uuid import UUID
+from app.api.notification_router import create_notification
 
 router = APIRouter(prefix="/api/social", tags=["Social"])
 
@@ -29,7 +30,18 @@ def follow_user(user_id: UUID, db: Session = Depends(get_db), current_user: User
     new_follow = Follow(follower_id=current_user.user_id, following_id=user_id)
     db.add(new_follow)
     db.commit()
-
+    # Notify the person being followed
+    actor_name = current_user.full_name or current_user.username or "Someone"
+    create_notification(
+        db,
+        recipient_id=user_id,
+        actor_id=current_user.user_id,
+        notif_type="FOLLOW",
+        message=f"{actor_name} started following you.",
+        entity_type="USER",
+        entity_id=current_user.user_id,
+    )
+    db.commit()
     return {"message": f"Successfully followed {target_user.username}"}
 
 @router.delete("/unfollow/{user_id}", status_code=status.HTTP_200_OK)

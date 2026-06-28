@@ -230,3 +230,25 @@
 ::-webkit-scrollbar-thumb:hover {
   background: var(--theme-surface-high);
 }
+
+/* AI Panel: horizontal tab row without visible scrollbar */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Spin animation for inline loaders */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Hover opacity reveal for AI chat copy button */
+.group:hover .group-hover\:opacity-100 {
+  opacity: 1 !important;
+}
+.transition-opacity {
+  transition: opacity 0.15s;
+}

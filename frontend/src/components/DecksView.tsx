@@ -11,22 +11,30 @@ import {
   Brain,
   HelpCircle,
   Trash2,
-  Loader2
+  Loader2,
+  Globe,
+  Lock
 } from "lucide-react";
 import { StudyDeck, StudyStats } from "../types";
 import { Button } from "./ui/Button";
 import { Badge } from "./ui/Badge";
 import { DeckPublisher, DeckFormData } from "./DeckPublisher";
 import { createDeck, mapApiDeckToStudyDeck, saveDeckMeta } from "../api/deckApi";
+import { publishDeck, unpublishDeck, updateDeckMeta } from "../api/exploreApi";
+import { PublishDeckModal } from "./PublishDeckModal";
+import { PullRequestModal } from "./PullRequestModal";
+import { SubmitPRModal } from "./SubmitPRModal";
+import { GitPullRequest } from "lucide-react";
 
 interface DecksViewProps {
   decks: StudyDeck[];
   stats: StudyStats;
-  onStudyDeck: (deckName: string) => void;
+  onStudyDeck: (deckName: string, deckId?: string) => void;
   onAddNewDeck: (deck: StudyDeck) => void;
   onDeleteDeck: (deckId: string) => Promise<void>;
   onAddNewCardClick?: () => void;
   decksLoading?: boolean;
+  onRefreshDecks?: () => void;
 
   searchQuery: string;
   isDarkMode?: boolean;
@@ -40,12 +48,19 @@ export default function DecksView({
   onDeleteDeck,
   onAddNewCardClick,
   decksLoading = false,
+  onRefreshDecks,
   searchQuery,
   isDarkMode = true
 }: DecksViewProps) {
   const [showAddForm, setShowAddForm] = useState<boolean>(false);
   const [creating, setCreating] = useState<boolean>(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [publishStatus, setPublishStatus] = useState<Record<string, boolean>>({});
+  const [publishingId, setPublishingId] = useState<string | null>(null);
+  const [publishingDeck, setPublishingDeck] = useState<StudyDeck | null>(null);
+  
+  const [viewingPRsFor, setViewingPRsFor] = useState<string | null>(null);
+  const [submittingPRFor, setSubmittingPRFor] = useState<string | null>(null);
 
   const filteredDecks = decks.filter((deck) => {
     return (
@@ -64,7 +79,13 @@ export default function DecksView({
     setCreating(true);
     try {
       // 1. Create deck in the backend (generates real UUID)
-      const apiDeck = await createDeck(data.dTitle);
+      const apiDeck = await createDeck(
+        data.dTitle,
+        data.dDescription,
+        data.dCategory,
+        !data.dPrivate,
+        tagsArray.length > 0 ? tagsArray : undefined
+      );
 
       // 2. Save UI-only metadata to localStorage, keyed by real UUID
       const meta = {
@@ -227,6 +248,29 @@ export default function DecksView({
                   </span>
                 </div>
 
+                {/* PR Actions */}
+                {deck.originalDeckId && deck.hasChanges ? (
+                  <Button
+                    onClick={() => setSubmittingPRFor(deck.id)}
+                    variant="outline"
+                    className="border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10 px-3"
+                    title="Submit changes to original deck"
+                  >
+                    <GitPullRequest className="w-4 h-4 mr-1.5" />
+                    Submit PR
+                  </Button>
+                ) : (deck.isPublic || publishStatus[deck.id]) ? (
+                  <Button
+                    onClick={() => setViewingPRsFor(deck.id)}
+                    variant="ghost"
+                    className="text-zinc-400 hover:text-white px-3"
+                    title="View Contributions"
+                  >
+                    <GitPullRequest className="w-4 h-4 mr-1.5" />
+                    PRs
+                  </Button>
+                ) : null}
+
                 {/* Primary dynamic CTA action button based on specs */}
                 {deck.cardCount > 0 ? (
                   <Button
@@ -244,6 +288,43 @@ export default function DecksView({
                   >
                     Review
                   </Button>
+                )}
+
+                {/* Publish/Unpublish toggle — hidden for default deck */}
+                {!deck.title.includes("Today's Review") && (
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const isCurrentlyPublic = publishStatus[deck.id] ?? deck.isPublic;
+                      if (isCurrentlyPublic) {
+                        setPublishingId(deck.id);
+                        try {
+                          await unpublishDeck(deck.id);
+                          setPublishStatus(prev => ({ ...prev, [deck.id]: false }));
+                        } catch (err) {
+                          console.error("Failed to unpublish", err);
+                        } finally {
+                          setPublishingId(null);
+                        }
+                      } else {
+                        // Open modal to configure and publish
+                        setPublishingDeck(deck);
+                      }
+                    }}
+                    disabled={publishingId === deck.id}
+                    title={(publishStatus[deck.id] ?? deck.isPublic) ? "Make private" : "Publish to Explore"}
+                    className={`p-2 transition-colors cursor-pointer disabled:opacity-50 ${
+                      (publishStatus[deck.id] ?? deck.isPublic)
+                        ? "text-green-400 hover:text-green-300"
+                        : "text-on-surface-variant/40 hover:text-white"
+                    }`}
+                  >
+                    {publishingId === deck.id
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                      : (publishStatus[deck.id] ?? deck.isPublic)
+                        ? <Globe className="w-4 h-4" />
+                        : <Lock className="w-4 h-4" />}
+                  </button>
                 )}
 
                 {/* Delete button — hidden for default deck (📚 Today's Review) */}
@@ -281,6 +362,52 @@ export default function DecksView({
           }}
         ></div>
       </div>
+
+      {publishingDeck && (
+        <PublishDeckModal
+          deck={publishingDeck}
+          isDarkMode={isDarkMode}
+          onClose={() => setPublishingDeck(null)}
+          onConfirm={async (payload) => {
+            try {
+              // 1. Update metadata
+              await updateDeckMeta(publishingDeck.id, payload);
+              // 2. Publish
+              await publishDeck(publishingDeck.id);
+              setPublishStatus(prev => ({ ...prev, [publishingDeck.id]: true }));
+              setPublishingDeck(null);
+            } catch (err) {
+              console.error("Failed to publish with metadata:", err);
+              throw err;
+            }
+          }}
+        />
+      )}
+
+      {/* PR Modals */}
+      {viewingPRsFor && (
+        <PullRequestModal
+          deckId={viewingPRsFor}
+          isDarkMode={isDarkMode}
+          onClose={() => setViewingPRsFor(null)}
+          onApproved={() => {
+            if (onRefreshDecks) {
+              onRefreshDecks();
+            }
+          }}
+        />
+      )}
+
+      {submittingPRFor && (
+        <SubmitPRModal
+          forkedDeckId={submittingPRFor}
+          onClose={() => setSubmittingPRFor(null)}
+          onSubmitted={() => {
+            setSubmittingPRFor(null);
+            alert("Pull request submitted successfully!");
+          }}
+        />
+      )}
     </div>
   );
 }

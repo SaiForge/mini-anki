@@ -1,5 +1,5 @@
 # app/models/all_models.py
-from sqlalchemy import Column, String, Integer, Date, DateTime, ForeignKey, Text, Boolean, JSON, UniqueConstraint
+from sqlalchemy import Column, String, Integer, Date, DateTime, ForeignKey, Text, Boolean, JSON, UniqueConstraint, func
 # pyrefly: ignore [missing-import]
 from sqlalchemy import Uuid as UUID
 from sqlalchemy.orm import relationship
@@ -22,6 +22,9 @@ class User(Base):
     location = Column(String(100), nullable=True)
     is_public = Column(Boolean, default=True)
     tags = Column(JSON, nullable=True)  # Store expertise tags
+    gender = Column(String(50), nullable=True)
+    dob = Column(Date, nullable=True)
+    role = Column(String(100), nullable=True)
     is_verified = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -51,14 +54,38 @@ class Deck(Base):
     deck_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=False)
     title = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    category = Column(String(50), nullable=True)
+    tags = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     is_default = Column(
         Integer, default=0, nullable=False
     )  # 1 for default, 0 for regular
+    # Phase 3: Sharing & Discovery
+    is_public = Column(Boolean, default=False)
+    fork_count = Column(Integer, default=0)
+    like_count = Column(Integer, default=0)
+    original_deck_id = Column(UUID(as_uuid=True), ForeignKey("decks.deck_id"), nullable=True)
 
     # Relationships
     owner = relationship("User", back_populates="decks")
     cards = relationship("Card", back_populates="deck", cascade="all, delete-orphan")
+    deck_likes = relationship("DeckLike", back_populates="deck", cascade="all, delete-orphan")
+
+
+class DeckLike(Base):
+    __tablename__ = "deck_likes"
+
+    like_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
+    deck_id = Column(UUID(as_uuid=True), ForeignKey("decks.deck_id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint('user_id', 'deck_id'),)
+
+    # Relationships
+    deck = relationship("Deck", back_populates="deck_likes")
+    user = relationship("User", foreign_keys=[user_id])
 
 
 class Card(Base):
@@ -118,3 +145,136 @@ class ReviewLog(Base):
 
     # Relationships
     card = relationship("Card", back_populates="review_logs")
+
+
+# ─── Phase 2: Content Feed & Interactions ─────────────────────────────────────
+
+class Post(Base):
+    __tablename__ = "posts"
+
+    post_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    author_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
+    content_type = Column(String(20), default="CONCEPT")  # CONCEPT, JOKE, RIDDLE, FLASHCARD, QUOTE
+    title = Column(String(200), nullable=True)
+    body = Column(Text, nullable=False)
+    code_snippet = Column(Text, nullable=True)
+    image_url = Column(String(500), nullable=True)
+    category = Column(String(50), nullable=True)
+    is_private = Column(Boolean, default=False)
+    deck_id = Column(UUID(as_uuid=True), ForeignKey("decks.deck_id", ondelete="CASCADE"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    author = relationship("User", foreign_keys=[author_id])
+    likes = relationship("PostLike", back_populates="post", cascade="all, delete-orphan")
+    bookmarks = relationship("Bookmark", back_populates="post", cascade="all, delete-orphan")
+    comments = relationship("Comment", back_populates="post", cascade="all, delete-orphan")
+
+
+class PostLike(Base):
+    __tablename__ = "post_likes"
+
+    like_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
+    post_id = Column(UUID(as_uuid=True), ForeignKey("posts.post_id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint('user_id', 'post_id'),)
+
+    # Relationships
+    post = relationship("Post", back_populates="likes")
+    user = relationship("User", foreign_keys=[user_id])
+
+
+class Bookmark(Base):
+    __tablename__ = "bookmarks"
+
+    bookmark_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
+    post_id = Column(UUID(as_uuid=True), ForeignKey("posts.post_id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint('user_id', 'post_id'),)
+
+    # Relationships
+    post = relationship("Post", back_populates="bookmarks")
+    user = relationship("User", foreign_keys=[user_id])
+
+
+class Comment(Base):
+    __tablename__ = "comments"
+
+    comment_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    post_id = Column(UUID(as_uuid=True), ForeignKey("posts.post_id", ondelete="CASCADE"), nullable=False)
+    author_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
+    parent_comment_id = Column(UUID(as_uuid=True), ForeignKey("comments.comment_id"), nullable=True)
+    body = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    post = relationship("Post", back_populates="comments")
+    author = relationship("User", foreign_keys=[author_id])
+    parent = relationship("Comment", back_populates="replies", remote_side="Comment.comment_id")
+    replies = relationship("Comment", back_populates="parent")
+
+
+# ── Phase 4: Notifications ─────────────────────────────────────────────────────
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    notification_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    recipient_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
+    actor_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True)
+    
+    # Type: LIKE | COMMENT | FOLLOW | DECK_FORK | REPLY | BOOKMARK | SYSTEM | PR_SUBMITTED | PR_APPROVED | PR_REJECTED
+    type = Column(String(50), nullable=False)
+    # What entity this is about: POST | DECK | COMMENT | USER | PULL_REQUEST
+    entity_type = Column(String(50), nullable=True)
+    entity_id = Column(UUID(as_uuid=True), nullable=True)
+    
+    message = Column(Text, nullable=False)
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    recipient = relationship("User", foreign_keys=[recipient_id])
+    actor = relationship("User", foreign_keys=[actor_id])
+
+
+class PullRequest(Base):
+    __tablename__ = "pull_requests"
+
+    pr_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    original_deck_id = Column(UUID(as_uuid=True), ForeignKey("decks.deck_id", ondelete="CASCADE"), nullable=False)
+    forked_deck_id = Column(UUID(as_uuid=True), ForeignKey("decks.deck_id", ondelete="CASCADE"), nullable=False)
+    author_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
+    
+    # PENDING | APPROVED | REJECTED
+    status = Column(String(20), default="PENDING", nullable=False)
+    message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    original_deck = relationship("Deck", foreign_keys=[original_deck_id])
+    forked_deck = relationship("Deck", foreign_keys=[forked_deck_id])
+    author = relationship("User", foreign_keys=[author_id])
+
+
+# ── Phase 5: Direct Messages ────────────────────────────────────────────────
+
+class DirectMessage(Base):
+    __tablename__ = "direct_messages"
+
+    message_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    sender_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
+    recipient_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
+    body = Column(Text, nullable=False)
+    is_read = Column(Boolean, default=False)
+    is_edited = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    sender = relationship("User", foreign_keys=[sender_id])
+    recipient = relationship("User", foreign_keys=[recipient_id])

@@ -15,13 +15,16 @@ import {
   Plus,
   ArrowLeft,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  Trash2
 } from "lucide-react";
 import { Flashcard } from "../types";
 import { FeedCard } from "./cards/FeedCard";
 import { Button } from "./ui/Button";
 import { Badge } from "./ui/Badge";
 import { getDueCards, gradeCard, mapDueCardToFlashcard, SrsGrade } from "../api/studyApi";
+import { getPublicDeckCards, getPublicDeck, forkDeck } from "../api/exploreApi";
+import { deleteCard, mapApiDeckToStudyDeck, getDeckCards } from "../api/deckApi";
 
 interface StudySessionProps {
   deckTitle: string;
@@ -50,22 +53,45 @@ export default function StudySession({
 }: StudySessionProps) {
   // ── State ─────────────────────────────────────────────────────────────────
   const [apiCards, setApiCards] = useState<Flashcard[]>([]);
-  const [cardsLoading, setCardsLoading] = useState<boolean>(!isPublic && !!deckId);
+  const [cardsLoading, setCardsLoading] = useState<boolean>(!!deckId);
   const [cardsError, setCardsError] = useState<string | null>(null);
 
   // For private (non-public) mode, fetch real due cards from the backend
   useEffect(() => {
-    if (isPublic || !deckId) return;
+    if (!deckId) return;
     setCardsLoading(true);
     setCardsError(null);
-    getDueCards(deckId)
-      .then(dueCards => {
-        setApiCards(dueCards.map(mapDueCardToFlashcard));
-      })
-      .catch(() => {
-        setCardsError("Failed to load cards. Check your connection.");
-      })
-      .finally(() => setCardsLoading(false));
+    
+    if (isPublic) {
+      Promise.all([
+        getPublicDeckCards(deckId),
+        getPublicDeck(deckId)
+      ])
+        .then(([cards, deck]) => {
+          setApiCards(cards.map((c: any) => ({
+            id: c.card_id,
+            question: c.front_text,
+            answer: c.back_text,
+          })));
+          setPublicDeckDetails(deck);
+        })
+        .catch(() => {
+          setCardsError("Failed to load public deck details. Check your connection.");
+        })
+        .finally(() => setCardsLoading(false));
+    } else {
+      getDueCards(deckId)
+        .then(dueCards => {
+          setApiCards(dueCards.map(mapDueCardToFlashcard));
+          if (dueCards.length === 0) {
+            setIsBrowsing(true);
+          }
+        })
+        .catch(() => {
+          setCardsError("Failed to load cards. Check your connection.");
+        })
+        .finally(() => setCardsLoading(false));
+    }
   }, [deckId, isPublic]);
   // Determine which cards to show:
   // - Private mode with deckId: use apiCards (from backend SRS queue)
@@ -86,9 +112,12 @@ export default function StudySession({
   ];
 
   const [extraCards, setExtraCards] = useState<Flashcard[]>([]);
+  const [isBrowsing, setIsBrowsing] = useState<boolean>(false);
+  const [browseCards, setBrowseCards] = useState<Flashcard[]>([]);
+  const [browseLoading, setBrowseLoading] = useState<boolean>(false);
 
-  const baseFlashcards: Flashcard[] = !isPublic && deckId
-    ? (apiCards.length > 0 ? apiCards : [])
+  const baseFlashcards: Flashcard[] = deckId
+    ? (isBrowsing && browseCards.length > 0 ? browseCards : (apiCards.length > 0 ? apiCards : []))
     : (propCards && propCards.length > 0 ? propCards : fallbackCards);
 
   const flashcards: Flashcard[] = [...baseFlashcards, ...extraCards];
@@ -98,6 +127,22 @@ export default function StudySession({
   const [sessionScore, setSessionScore] = useState<number>(0);
   const [complete, setComplete] = useState<boolean>(false);
   const [grading, setGrading] = useState<boolean>(false);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (isBrowsing && deckId && !isPublic && browseCards.length === 0) {
+      setBrowseLoading(true);
+      getDeckCards(deckId).then(cards => {
+        setBrowseCards(cards.map(c => ({
+          id: c.card_id,
+          question: c.front_text,
+          answer: c.back_text
+        })));
+      }).catch(err => {
+        console.error("Failed to load deck cards", err);
+      }).finally(() => setBrowseLoading(false));
+    }
+  }, [isBrowsing, deckId, isPublic, browseCards.length]);
 
   const activeCard = flashcards[currentIndex];
 
@@ -164,110 +209,84 @@ export default function StudySession({
     setExtraCards([]);
   };
 
-  // Publisher lookup map
-  const cleanTitle = deckTitle?.toLowerCase() || "";
-  let matchedPublisher = {
-    creator: "@dev_kaufman",
-    name: "Alex Kaufman",
-    avatar: "AK",
-    likes: 247,
-    isFollowed: false,
-    description: "Deep dive into memoization, tabulation, and complexity analysis for string manipulation problems.",
-    tags: ["Algorithms", "DP", "Recursive"]
+  const handleDeleteCard = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!deckId || !activeCard?.id || isPublic) return;
+    
+    if (window.confirm("Are you sure you want to permanently delete this card?")) {
+      setIsDeleting(true);
+      try {
+        await deleteCard(deckId, activeCard.id);
+        
+        // Remove from UI
+        setApiCards(prev => prev.filter(c => c.id !== activeCard.id));
+        setExtraCards(prev => prev.filter(c => c.id !== activeCard.id));
+        
+        // Advance
+        if (currentIndex < flashcards.length - 1) {
+          setShowAnswer(false);
+        } else {
+          setComplete(true);
+        }
+      } catch (err) {
+        alert("Failed to delete card");
+      } finally {
+        setIsDeleting(false);
+      }
+    }
   };
 
-  if (cleanTitle.includes("haskell") || cleanTitle.includes("monad")) {
-    matchedPublisher = {
-      creator: "@λ_stack",
-      name: "Lambda Stack",
-      avatar: "Λ",
-      likes: 184,
-      isFollowed: true,
-      description: "Pragmatic structures, functors, applicability, and computational sequencing in pure functional paradigms.",
-      tags: ["Haskell", "Monads", "FP"]
-    };
-  } else if (cleanTitle.includes("cognitive") || cleanTitle.includes("science") || cleanTitle.includes("synaptic")) {
-    matchedPublisher = {
-      creator: "@neuro_explorer",
-      name: "Synapse Plasticity",
-      avatar: "NP",
-      likes: 512,
-      isFollowed: false,
-      description: "Understanding the intersection of synaptic plasticity and information theory in biological neural systems.",
-      tags: ["Biology", "Cognitive", "AI"]
-    };
-  } else if (cleanTitle.includes("quantum") || cleanTitle.includes("electrodynamics")) {
-    matchedPublisher = {
-      creator: "@qed_physicist",
-      name: "Feynman G",
-      avatar: "QP",
-      likes: 319,
-      isFollowed: false,
-      description: "Basic formulas, QED Feynman diagrams, photon behaviors, and perturbation methods.",
-      tags: ["Physics", "Feynman", "QED"]
-    };
-  } else if (cleanTitle.includes("wittgenstein") || cleanTitle.includes("tractatus")) {
-    matchedPublisher = {
-      creator: "@philosophia",
-      name: "Wittgenstein fan",
-      avatar: "WP",
-      likes: 92,
-      isFollowed: false,
-      description: "Exploring the logic-philosophical treaties, logical atoms, and representation frameworks.",
-      tags: ["Philosophy", "Wittgenstein", "Logic"]
-    };
-  } else if (cleanTitle.includes("typography") || cleanTitle.includes("grid")) {
-    matchedPublisher = {
-      creator: "@grid_master",
-      name: "Swiss Gridder",
-      avatar: "GM",
-      likes: 412,
-      isFollowed: true,
-      description: "The Swiss design manual for digital interfaces. Focus on 8px grid and modular layout scaling principles.",
-      tags: ["Design", "Grid", "Typography"]
-    };
-  } else if (cleanTitle.includes("refactoring") || cleanTitle.includes("comedy") || cleanTitle.includes("laugh") || cleanTitle.includes("joke") || cleanTitle.includes("humor")) {
-    matchedPublisher = {
-      creator: "@dev_laugh",
-      name: "Comedy Central",
-      avatar: "CC",
-      likes: 153,
-      isFollowed: false,
-      description: "A developer writes perfect, clean code. All unit tests pass locally. However, right before the CEO's demonstration, it mysteriously crashes.",
-      tags: ["Humor", "Refactoring", "Code"]
-    };
-  } else if (cleanTitle.includes("cryptic") || cleanTitle.includes("cipher") || cleanTitle.includes("riddle")) {
-    matchedPublisher = {
-      creator: "@logic_matrix",
-      name: "Cipher Core",
-      avatar: "CC",
-      likes: 201,
-      isFollowed: false,
-      description: "I am a logical mechanism. The more libraries and components you import, the larger I grow. Yet, the fewer syntax lines you write, the cleaner I compile. What am I?",
-      tags: ["Riddles", "Logic", "Ciphers"]
-    };
-  } else if (cleanTitle.includes("ecmascript") || cleanTitle.includes("internals") || cleanTitle.includes("v8")) {
-    matchedPublisher = {
-      creator: "@js_runtime",
-      name: "Chrome V8 Team",
-      avatar: "JS",
-      likes: 340,
-      isFollowed: true,
-      description: "V8 engine internals, memory models, garbage collection generations, and event loop microtask semantics.",
-      tags: ["JS", "V8", "Engine"]
-    };
-  }
+  const [publicDeckDetails, setPublicDeckDetails] = useState<any>(null);
 
-  const [followed, setFollowed] = useState<boolean>(() => matchedPublisher.isFollowed);
+  const cleanTitle = deckTitle?.toLowerCase() || "";
+
+  const matchedDeckFromProps = decks?.find(d => d.id === deckId) || null;
+
+  // Publisher lookup map
+  let matchedPublisher = publicDeckDetails ? {
+    creator: `@${publicDeckDetails.owner_username || "anonymous"}`,
+    name: publicDeckDetails.owner_full_name || publicDeckDetails.owner_username || "Unknown",
+    avatar: (publicDeckDetails.owner_full_name || publicDeckDetails.owner_username || "?").substring(0, 2).toUpperCase(),
+    likes: publicDeckDetails.like_count || 0,
+    isFollowed: false,
+    description: publicDeckDetails.description || "",
+    tags: publicDeckDetails.tags?.length > 0 ? publicDeckDetails.tags : (publicDeckDetails.category ? [publicDeckDetails.category] : ["Explore"])
+  } : matchedDeckFromProps ? {
+    creator: `@you`,
+    name: "You",
+    avatar: "YO",
+    likes: matchedDeckFromProps.likeCount || 0,
+    isFollowed: false,
+    description: matchedDeckFromProps.description || "Your private deck",
+    tags: matchedDeckFromProps.tags?.length > 0 ? matchedDeckFromProps.tags : (matchedDeckFromProps.category ? [matchedDeckFromProps.category] : ["Private"])
+  } : {
+    creator: "@loading",
+    name: "Loading...",
+    avatar: "LD",
+    likes: 0,
+    isFollowed: false,
+    description: "...",
+    tags: []
+  };
+
+  const [followed, setFollowed] = useState<boolean>(false);
   const [likedDeck, setLikedDeck] = useState<boolean>(false);
-  const [deckLikes, setDeckLikes] = useState<number>(() => matchedPublisher.likes);
+  const [deckLikes, setDeckLikes] = useState<number>(0);
+
+  // Sync state once details load
+  useEffect(() => {
+    if (publicDeckDetails) {
+      setDeckLikes(publicDeckDetails.like_count || 0);
+      setLikedDeck(publicDeckDetails.is_liked || false);
+    }
+  }, [publicDeckDetails]);
 
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
   const [cardLikes, setCardLikes] = useState<Record<string, { count: number, active: boolean }>>(() => {
     const initial: Record<string, { count: number, active: boolean }> = {};
     flashcards.forEach(card => {
       initial[card.id] = {
-        count: Math.floor(Math.random() * 24) + 12,
+        count: 0,
         active: false
       };
     });
@@ -276,22 +295,33 @@ export default function StudySession({
   const [cardSaved, setCardSaved] = useState<Record<string, boolean>>({});
   const [activeSaveDeckCardId, setActiveSaveDeckCardId] = useState<string | null>(null);
   const [savedFeedback, setSavedFeedback] = useState<Record<string, string>>({});
-  const [cardShared, setCardShared] = useState<Record<string, boolean>>({});  if (isPublic) {
-    const isAlreadyImported = decks?.some(d => d.title.toLowerCase() === deckTitle.toLowerCase()) || false;
+  const [isImporting, setIsImporting] = useState<boolean>(false);
 
-    const handleImportDeckClick = () => {
+  if (isPublic || isBrowsing) {
+    const isAlreadyImported = decks?.some(d => d.originalDeckId === deckId || d.id === deckId || d.title.toLowerCase() === deckTitle.toLowerCase() || d.title.toLowerCase() === `${deckTitle.toLowerCase()} (fork)`) || false;
+
+    const handleImportDeckClick = async () => {
+      if (!deckId) return;
       if (onImportDeck) {
-        const newDeck = {
-          id: `deck-imported-${Date.now()}`,
-          category: matchedPublisher.tags[0]?.toUpperCase() || "EXPLORE",
-          title: deckTitle,
-          description: matchedPublisher.description,
-          progress: 0,
-          cardCount: flashcards.length,
-          iconType: "terminal",
-          cards: flashcards
-        };
-        onImportDeck(newDeck);
+        setIsImporting(true);
+        try {
+          // Actually fork the deck on the backend
+          const forkedApiDeck = await forkDeck(deckId);
+          
+          // The forkDeck API currently returns PublicDeck structure, which is very similar to ApiDeck.
+          // mapApiDeckToStudyDeck handles formatting.
+          const newDeck = mapApiDeckToStudyDeck(forkedApiDeck as any);
+          
+          // Optionally attach cards if we have them in memory
+          newDeck.cards = flashcards;
+          
+          onImportDeck(newDeck);
+        } catch (err) {
+          console.error("Failed to fork deck", err);
+          alert("Failed to add deck to your studies.");
+        } finally {
+          setIsImporting(false);
+        }
       }
     };
 
@@ -345,7 +375,7 @@ export default function StudySession({
             {/* Tags and Import Action Row */}
             <div className="flex flex-wrap items-center justify-between gap-4 pt-1 border-t border-dotted border-zinc-500/25 mt-2">
               <div className="flex flex-wrap gap-2 py-1">
-                {(matchedPublisher.tags || []).map(tag => (
+                {(matchedPublisher.tags || []).map((tag: any) => (
                   <span 
                     key={tag}
                     className={`text-[9.5px] font-mono font-medium px-2.5 py-0.5 rounded-xs uppercase tracking-wider ${
@@ -397,10 +427,11 @@ export default function StudySession({
                   <Button
                     onClick={handleImportDeckClick}
                     variant="primary"
-                    className="flex items-center gap-1.5 uppercase font-bold"
+                    disabled={isImporting}
+                    className="flex items-center gap-1.5 uppercase font-bold disabled:opacity-70"
                     isDarkMode={isDarkMode}
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    {isImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
                     <span>Add to My Studies</span>
                   </Button>
                 )}
@@ -457,19 +488,6 @@ export default function StudySession({
 
             {flashcards.map((card, idx) => {
               const isExpanded = expandedCards[card.id] || false;
-              const likesData = cardLikes[card.id] || { count: 18, active: false };
-              const isSaved = cardSaved[card.id] || false;
-              const isShared = cardShared[card.id] || false;
-
-              const isJoke = cleanTitle.includes("refactoring") || cleanTitle.includes("comedy") || cleanTitle.includes("laugh") || cleanTitle.includes("joke") || cleanTitle.includes("humor");
-              const emoji = isJoke ? "🎭" : "💡";
-              const buttonText = isExpanded 
-                ? `${emoji} CONCEAL SOLUTION` 
-                : isJoke 
-                  ? "🎭 REVEAL PUNCHLINE" 
-                  : "💡 REVEAL ANSWER";
-
-              const solvedIndicator = isJoke ? "PUNCHLINE" : "ANSWER";
 
               return (
                 <article key={card.id} className="space-y-3">
@@ -488,89 +506,6 @@ export default function StudySession({
                       }));
                     }}
                   />
-                  {/* 2. Outer Social Toolbar (matching underneath margins exactly) */}
-                  <div className={`flex items-center justify-between px-2 text-[11px] font-mono transition-colors pb-6 ${
-                    isDarkMode ? "text-zinc-400" : "text-[#4a4e69]"
-                  }`} onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center gap-5">
-                      {/* Likes status button */}
-                      <button
-                        onClick={() => {
-                          const loved = !likesData.active;
-                          setCardLikes(prev => ({
-                            ...prev,
-                            [card.id]: {
-                              count: loved ? likesData.count + 1 : likesData.count - 1,
-                              active: loved
-                            }
-                          }));
-                        }}
-                        className={`flex items-center gap-1.5 transition-colors group/btn cursor-pointer ${
-                          likesData.active 
-                            ? "text-red-500 font-semibold" 
-                            : isDarkMode 
-                              ? "text-zinc-400 hover:text-white" 
-                              : "text-[#4a4e69]/75 hover:text-[#22223b]"
-                        }`}
-                      >
-                        <Heart
-                          className={`w-3.5 h-3.5 transition-transform group-hover/btn:scale-110 ${
-                            likesData.active ? "text-red-500 fill-red-500" : ""
-                          }`}
-                        />
-                        <span>{likesData.count}</span>
-                      </button>
-
-                      {/* Copy Shareable Link button */}
-                      <button
-                        onClick={() => {
-                          setCardShared(prev => ({ ...prev, [card.id]: true }));
-                          if (navigator.clipboard) {
-                            navigator.clipboard.writeText(`${window.location.origin}/post/${card.id}\n\nConcept: ${card.question}\nReference Outcome: ${card.answer}`);
-                          }
-                          setTimeout(() => {
-                            setCardShared(prev => ({ ...prev, [card.id]: false }));
-                          }, 2000);
-                        }}
-                        className={`flex items-center gap-1.5 transition-colors group/btn cursor-pointer ${
-                          isDarkMode 
-                            ? "text-zinc-400 hover:text-white" 
-                            : "text-[#4a4e69]/75 hover:text-[#22223b]"
-                        }`}
-                        title="Copy shareable link"
-                      >
-                        <Share2 className="w-3.5 h-3.5 transition-transform group-hover/btn:scale-110" />
-                        <span>{isShared ? "Copied!" : "Share"}</span>
-                      </button>
-                    </div>
-
-                    {/* Right info (timestamp & Bookmark save button) */}
-                    <div className="flex items-center gap-4">
-                      <span className={`text-[10px] font-mono tracking-wide ${
-                        isDarkMode ? "text-zinc-400/80" : "text-[#4a4e69]/55"
-                      }`}>
-                        JUST NOW
-                      </span>
-                      
-                      <button
-                        onClick={() => {
-                          setCardSaved(prev => ({ ...prev, [card.id]: !isSaved }));
-                        }}
-                        className={`flex items-center gap-1.5 transition-colors group/btn cursor-pointer ${
-                          isSaved 
-                            ? isDarkMode ? "text-white font-semibold" : "text-[#22223b] font-semibold"
-                            : isDarkMode ? "text-zinc-400 hover:text-white" : "text-[#4a4e69]/75 hover:text-[#22223b]"
-                        }`}
-                        title={isSaved ? "Saved to Personal Decks" : "Save to Decks"}
-                      >
-                        <Bookmark
-                          className={`w-3.5 h-3.5 transition-transform group-hover/btn:scale-110 ${
-                            isSaved ? "fill-current" : ""
-                          }`}
-                        />
-                      </button>
-                    </div>
-                  </div>
                 </article>
               );
             })}
@@ -644,6 +579,7 @@ export default function StudySession({
             </div>
             <div className="flex justify-center gap-3">
               <Button onClick={onClose} variant="primary" isDarkMode={isDarkMode}>Back to Decks</Button>
+              <Button onClick={() => setIsBrowsing(true)} variant="outline" isDarkMode={isDarkMode}>Browse Deck</Button>
             </div>
           </div>
         ) : complete ? (
@@ -680,6 +616,14 @@ export default function StudySession({
                 isDarkMode={isDarkMode}
               >
                 Study Again
+              </Button>
+              <Button
+                onClick={() => setIsBrowsing(true)}
+                variant="outline"
+                className="px-5 py-2"
+                isDarkMode={isDarkMode}
+              >
+                Browse Deck
               </Button>
               <Button
                 onClick={onClose}
@@ -724,13 +668,21 @@ export default function StudySession({
                     <HelpCircle className="w-3.5 h-3.5" />
                     <span>Question Query</span>
                   </span>
-                  <span className={`text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 border rounded ${
-                    isDarkMode 
-                      ? "text-on-surface-variant/40 bg-[#111] border-[#1a1a1a]" 
-                      : "text-[#4a4e69]/80 bg-[#ebdcd7]/40 border-[#c9ada7]"
-                  }`}>
-                    TAP TO {showAnswer ? "HIDE" : "REVEAL"}
-                  </span>
+                  
+                  <div className="flex items-center gap-2">
+                    {!isPublic && deckId && activeCard?.id && (
+                      <button
+                        onClick={handleDeleteCard}
+                        disabled={isDeleting}
+                        title="Delete Card"
+                        className={`p-1 rounded cursor-pointer transition-colors ${
+                          isDarkMode ? "text-zinc-500 hover:text-red-400 hover:bg-red-950/30" : "text-zinc-400 hover:text-red-600 hover:bg-red-50"
+                        }`}
+                      >
+                        {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <p className={`text-sm md:text-base font-light leading-normal tracking-wide ${
                   isDarkMode ? "text-white" : "text-[#22223b] font-medium"

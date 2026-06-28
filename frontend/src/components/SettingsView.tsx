@@ -9,9 +9,12 @@ import {
   ShieldAlert, 
   Trash2, 
   Check, 
-  Database 
+  Database,
+  Loader2,
+  AlertTriangle
 } from "lucide-react";
 import { Button } from "./ui/Button";
+import { deleteAccount } from "../api/authApi";
 import { Input } from "./ui/Input";
 import { Badge } from "./ui/Badge";
 
@@ -24,6 +27,26 @@ interface SettingsViewProps {
 
 export default function SettingsView({ userEmail, isDarkMode, onToggleDarkMode, onLogout }: SettingsViewProps) {
   const [reduceMotion, setReduceMotion] = useState<boolean>(false);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+
+  const handleDeleteAccount = async () => {
+    const confirmed = window.confirm(
+      "Are you absolutely sure you want to delete your account? This action is permanent and cannot be undone. All your decks, cards, posts, and data will be permanently deleted."
+    );
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    try {
+      await deleteAccount();
+      // On success, trigger the global logout handler to clear state and redirect to login
+      onLogout();
+    } catch (err) {
+      console.error("Failed to delete account:", err);
+      alert("An error occurred while deleting your account. Please try again.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <div className="max-w-2xl mx-auto py-8 px-4 md:px-0 space-y-16 pb-32">
@@ -146,6 +169,34 @@ export default function SettingsView({ userEmail, isDarkMode, onToggleDarkMode, 
             >
               <span className="text-[11px] font-bold uppercase tracking-widest">Terminate Session / Log Out</span>
               <LogOut className="w-4 h-4" />
+            </Button>
+          </div>
+        </section>
+
+        {/* Danger Zone Group */}
+        <section className="space-y-4 pt-8 border-t border-red-900/20">
+          <h3 className={`text-[10px] font-mono tracking-[0.25em] uppercase border-b pb-2 transition-colors ${
+            isDarkMode ? "text-red-500/80 border-red-900/30" : "text-red-600/80 border-red-200/50 font-semibold"
+          }`}>
+            Danger Zone
+          </h3>
+
+          <div className="pt-2">
+            <Button 
+              variant="outline" 
+              onClick={handleDeleteAccount}
+              disabled={isDeleting}
+              className={`w-full flex items-center justify-between py-4 px-2 transition-all rounded-xs text-left cursor-pointer ${
+                isDarkMode ? "text-red-500 border-red-900/40 hover:bg-red-950/40 hover:border-red-500/50" : "text-red-600 border-red-200 hover:bg-red-50 hover:border-red-400"
+              }`}
+            >
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-widest block">Delete Account</span>
+                <span className={`text-[9px] uppercase tracking-wider block mt-1 ${isDarkMode ? "text-red-500/60" : "text-red-600/60"}`}>
+                  Permanently delete all data
+                </span>
+              </div>
+              {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <AlertTriangle className="w-4 h-4" />}
             </Button>
           </div>
         </section>

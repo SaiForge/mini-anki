@@ -16,6 +16,11 @@ export interface UserResponse {
   is_verified: boolean;
   current_streak: number;
   last_review_date: string | null;
+  gender: string | null;
+  dob: string | null;
+  role: string | null;
+  followers_count?: number;
+  following_count?: number;
 }
 
 export interface UserUpdatePayload {
@@ -27,6 +32,9 @@ export interface UserUpdatePayload {
   location?: string | null;
   is_public?: boolean;
   tags?: string[] | null;
+  gender?: string | null;
+  dob?: string | null;
+  role?: string | null;
 }
 
 export interface TokenResponse {
@@ -56,10 +64,20 @@ export async function register(payload: {
   full_name: string;
   bio?: string;
   profile_picture_url?: string | null;
+  gender?: string | null;
+  dob?: string | null;
+  role?: string | null;
 }): Promise<MessageResponse> {
   const { data } = await axiosClient.post<MessageResponse>(
     "/api/auth/register",
     payload
+  );
+  return data;
+}
+
+export async function checkUsername(username: string): Promise<{ available: boolean }> {
+  const { data } = await axiosClient.get<{ available: boolean }>(
+    `/api/auth/check-username?username=${encodeURIComponent(username)}`
   );
   return data;
 }
@@ -71,6 +89,11 @@ export async function getMe(): Promise<UserResponse> {
 
 export async function updateMe(payload: UserUpdatePayload): Promise<UserResponse> {
   const { data } = await axiosClient.put<UserResponse>("/api/auth/me", payload);
+  return data;
+}
+
+export async function deleteAccount(): Promise<MessageResponse> {
+  const { data } = await axiosClient.delete<MessageResponse>("/api/auth/users/me");
   return data;
 }
 

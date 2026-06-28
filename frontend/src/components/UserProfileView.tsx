@@ -15,12 +15,16 @@ import {
   Calendar,
   Layers,
   ArrowUpRight,
-  ArrowLeft
+  ArrowLeft,
+  Grid,
+  MessageSquare
 } from "lucide-react";
 import { FeedItem, StudyDeck } from "../types";
 import { FeedCard } from "./cards/FeedCard";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { getPublicProfile, followUser, unfollowUser, checkIsFollowing } from "../api/socialApi";
+import { getUserPosts, PostResponse, likePost, unlikePost } from "../api/feedApi";
+import { getPublicUserDecks, mapApiDeckToStudyDeck, ApiDeck } from "../api/deckApi";
 
 interface UserProfileViewProps {
   username: string;
@@ -28,9 +32,13 @@ interface UserProfileViewProps {
   feedItems: FeedItem[];
   userDecks: StudyDeck[];
   onToggleFollow: (username: string) => void;
-  onStudyDeck: (deckName: string) => void;
+  onStudyDeck: (deckName: string, deckId?: string) => void;
   onImportDeck?: (deck: any) => void;
-  userEmail: string;
+  onDeletePost?: (postId: string) => void;
+  userEmail?: string;
+  currentUserId?: string;
+  currentUsername?: string;
+  onMessageClick?: (user: { user_id: string; username: string; full_name: string | null; avatar_url: string | null }) => void;
 }
 
 // Preset metadata for system authors
@@ -263,17 +271,47 @@ export default function UserProfileView({
   onToggleFollow,
   onStudyDeck,
   onImportDeck,
-  userEmail
+  onDeletePost,
+  userEmail,
+  currentUserId,
+  currentUsername,
+  onMessageClick
 }: UserProfileViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<"POSTS" | "DECKS">("POSTS");
   const [revealedItems, setRevealedItems] = useState<Record<string, boolean>>({});
   const [copiedLinkPostId, setCopiedLinkPostId] = useState<string | null>(null);
   const [importStatus, setImportStatus] = useState<Record<string, boolean>>({});
 
+  // Lazy loading state
+  const [displayLimit, setDisplayLimit] = useState(10);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setDisplayLimit(10); // reset when tab changes
+  }, [activeSubTab]);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setDisplayLimit((prev) => prev + 10);
+        }
+      },
+      { threshold: 0.1 }
+    );
+    if (loadMoreRef.current) {
+      observer.observe(loadMoreRef.current);
+    }
+    return () => observer.disconnect();
+  }, [activeSubTab]);
+
   const [remoteUser, setRemoteUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isFollowedStatus, setIsFollowedStatus] = useState(false);
   const [followProcessing, setFollowProcessing] = useState(false);
+  const [userPosts, setUserPosts] = useState<PostResponse[]>([]);
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [remoteDecks, setRemoteDecks] = useState<ApiDeck[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -285,6 +323,24 @@ export default function UserProfileView({
           setRemoteUser(u);
           const followData = await checkIsFollowing(u.user_id);
           setIsFollowedStatus(followData.is_following);
+          // Fetch this user's posts from backend
+          setPostsLoading(true);
+          try {
+            const posts = await getUserPosts(u.user_id, 0, 30);
+            if (active) setUserPosts(posts);
+          } catch (e) {
+            console.warn("Could not load user posts", e);
+          } finally {
+            if (active) setPostsLoading(false);
+          }
+
+          // Fetch this user's public decks from backend
+          try {
+            const decks = await getPublicUserDecks(u.user_id);
+            if (active) setRemoteDecks(decks);
+          } catch (e) {
+            console.warn("Could not load user decks", e);
+          }
         }
       } catch (err) {
         console.warn("Failed to load user profile via API, falling back to mock", err);
@@ -309,7 +365,8 @@ export default function UserProfileView({
         followers: remoteUser.followers_count || 0,
         following: remoteUser.following_count || 0,
         customAvatarUrl: remoteUser.profile_picture_url,
-        decks: [] // Decks loading will be handled in Phase 3
+        role: remoteUser.role || "RESEARCH NODE",
+        decks: remoteDecks.map(d => mapApiDeckToStudyDeck(d))
       };
     }
 
@@ -328,6 +385,7 @@ export default function UserProfileView({
             followers: 24,
             following: 130,
             customAvatarUrl: parsed.avatarUrl,
+            role: "LOCAL STUDENT",
             decks: userDecks.map(deck => ({
               id: deck.id,
               title: deck.title,
@@ -377,19 +435,43 @@ export default function UserProfileView({
       streak: 7,
       followers: 120,
       following: 85,
+      role: "RESEARCH NODE",
       decks: []
     };
-  }, [username, userDecks]);
+  }, [username, userDecks, remoteUser, remoteDecks]);
 
   // Extract author name for follow status tracking
   const matchedFeedItem = useMemo(() => {
     return feedItems.find(item => item.authorUsername === username);
   }, [feedItems, username]);
 
-  // Filter public posts of this specific user
+  // Filter public posts — use backend data for remote users, feedItems for mock/self
   const publicPosts = useMemo(() => {
+    if (remoteUser && userPosts.length > 0) {
+      // Map PostResponse → FeedItem shape for FeedCard
+      return userPosts.map(p => ({
+        id: p.post_id,
+        category: p.category || p.content_type || "CONCEPT",
+        title: p.title || "",
+        content: p.body,
+        codeSnippet: p.code_snippet || undefined,
+        imageUrl: p.image_url || undefined,
+        likes: p.likes_count,
+        likedByUser: p.is_liked,
+        bookmarkedByUser: p.is_bookmarked,
+        timeLabel: new Date(p.created_at).toLocaleDateString(),
+        isPrivate: p.is_private,
+        authorName: p.author_full_name || p.author_username || "",
+        authorUsername: p.author_username ? `@${p.author_username}` : username,
+        authorId: p.author_id,
+        authorAvatar: (p.author_full_name || p.author_username || "?").substring(0, 2).toUpperCase(),
+        isFollowed: isFollowedStatus,
+        tags: [],
+        commentsCount: p.comments_count,
+      }));
+    }
     return feedItems.filter(item => item.authorUsername === username);
-  }, [feedItems, username]);
+  }, [remoteUser, userPosts, feedItems, username, isFollowedStatus]);
 
   // Handle local decryption flip
   const handleToggleReveal = (id: string) => {
@@ -466,127 +548,161 @@ export default function UserProfileView({
           <span>Back</span>
         </button>
 
-        {/* Identity line matching ProfileView.tsx */}
-        <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between gap-5 text-center sm:text-left mt-2">
-          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
-            <div className="relative">
-              {userDetails.customAvatarUrl ? (
-                <img 
-                  src={userDetails.customAvatarUrl} 
-                  alt={userDetails.name}
-                  className="w-20 h-20 rounded-full border border-[#1A1A1A] object-cover bg-black relative shadow-lg"
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <div className={`w-20 h-20 rounded-full border border-[#1A1A1A] flex items-center justify-center text-xl font-mono font-black uppercase shadow-lg ${userDetails.avatarBg}`}>
-                  {userDetails.avatar}
+        {/* Main Card Element */}
+        <div id="profile-card" className="w-full">
+          <div className="space-y-6 pt-4">
+            
+            <div className="flex flex-col sm:flex-row sm:items-start gap-6 sm:gap-10">
+              {/* Avatar Section */}
+              <div className="flex justify-center sm:justify-start flex-shrink-0">
+                <div className="relative group">
+                  {userDetails.customAvatarUrl ? (
+                    <img 
+                      src={userDetails.customAvatarUrl} 
+                      alt={userDetails.name}
+                      className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border border-[#1A1A1A] object-cover bg-black relative"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className={`w-24 h-24 sm:w-32 sm:h-32 rounded-full border border-[#1A1A1A] flex items-center justify-center text-3xl font-mono font-black uppercase ${userDetails.avatarBg}`}>
+                      {userDetails.avatar}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-            <div className="pt-2 sm:pt-4 space-y-1">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 justify-center sm:justify-start">
-                <h2 className="text-lg font-bold text-white font-sans">{userDetails.name}</h2>
-                <span className="inline-block self-center sm:self-auto text-[9px] font-mono border border-[#1A1A1A] px-1.5 py-0.5 rounded text-on-surface-variant uppercase font-medium">
-                  {username === "@kolarsaibag" ? "LOCAL STUDENT" : "RESEARCH NODE"}
-                </span>
               </div>
-              <p className="text-[11px] font-mono text-on-surface-variant/60">
-                {username}
-              </p>
-            </div>
-          </div>
-          <div className="pt-4 sm:pt-0 flex flex-col gap-2">
-            {/* Profile Follow states */}
-            {username !== "@kolarsaibag" && userEmail !== username && remoteUser && (
-              <div className="flex-shrink-0">
-                {!isFollowedStatus ? (
-                  <button
-                    onClick={handleToggleFollow}
-                    disabled={followProcessing}
-                    className="px-4 py-2 bg-transparent hover:bg-white/5 text-xs font-sans font-medium text-white border border-[#1A1A1A] hover:border-white/40 rounded-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    <UserPlus className="w-3.5 h-3.5" />
-                    <span>{followProcessing ? "..." : "Follow"}</span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleToggleFollow}
-                    disabled={followProcessing}
-                    className="px-4 py-2 bg-transparent hover:bg-white/5 text-xs font-sans font-medium text-green-400 border border-[#1A1A1A] hover:border-green-400/40 rounded-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    <UserCheck className="w-3.5 h-3.5" />
-                    <span>{followProcessing ? "..." : "Following"}</span>
-                  </button>
-                )}
+
+              {/* Info Column */}
+              <div className="flex-1 w-full space-y-4 sm:space-y-5">
+                
+                {/* 1. Full Name and Buttons */}
+                <div className="flex items-start justify-between w-full gap-4">
+                  <h2 id="profile-display-name" className="text-2xl sm:text-3xl font-bold text-white font-sans truncate flex items-baseline justify-center sm:justify-start gap-3">
+                    {userDetails.name}
+                    <span className="font-medium text-zinc-400 uppercase text-xs tracking-wider hidden sm:inline">{userDetails.role || "RESEARCH NODE"}</span>
+                  </h2>
+                  <div className="flex flex-row items-center gap-2 flex-shrink-0">
+                    {/* Profile Follow states */}
+                    {username !== "@kolarsaibag" && userEmail !== username && remoteUser && (
+                      <div className="flex flex-row items-center gap-2 flex-shrink-0">
+                        {!isFollowedStatus ? (
+                          <button
+                            onClick={handleToggleFollow}
+                            disabled={followProcessing}
+                            className="px-4 py-1.5 bg-primary hover:bg-primary/90 text-on-primary text-[10px] font-mono font-bold uppercase tracking-wider rounded transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                          >
+                            <UserPlus className="w-4 h-4" />
+                            <span>{followProcessing ? "..." : "Follow"}</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={handleToggleFollow}
+                            disabled={followProcessing}
+                            className="px-4 py-1.5 bg-surface-container hover:bg-surface-high text-on-surface text-xs font-mono font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                          >
+                            <UserCheck className="w-4 h-4 text-green-500" />
+                            <span>{followProcessing ? "..." : "Following"}</span>
+                          </button>
+                        )}
+                        {userDetails.id && (
+                          <button
+                            onClick={() => onMessageClick?.({
+                              user_id: userDetails.id,
+                              username: username.startsWith('@') ? username.substring(1) : username,
+                              full_name: userDetails.name !== username ? userDetails.name : null,
+                              avatar_url: userDetails.customAvatarUrl || null
+                            })}
+                            className="px-4 py-1.5 bg-surface-container hover:bg-surface-high text-on-surface text-[10px] font-mono font-bold uppercase tracking-wider rounded transition-all flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <MessageSquare className="w-4 h-4" />
+                            <span>Message</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 2. Username */}
+                <div className="text-center sm:text-left text-base text-zinc-400 font-sans font-medium -mt-2">
+                  @{username.startsWith("@") ? username.substring(1) : username}
+                </div>
+
+                {/* 3. Stats Row */}
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-6 gap-y-3 pt-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-white font-sans text-base">{publicPosts.length}</span>
+                    <span className="text-[15px] text-zinc-300 font-sans">posts</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-white font-sans text-base">{userDetails.decks?.length || 0}</span>
+                    <span className="text-[15px] text-zinc-300 font-sans">decks</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-white font-sans text-base">{userDetails.followers >= 1000 ? `${(userDetails.followers / 1000).toFixed(1)}k` : userDetails.followers}</span>
+                    <span className="text-[15px] text-zinc-300 font-sans">followers</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-white font-sans text-base">{userDetails.following}</span>
+                    <span className="text-[15px] text-zinc-300 font-sans">following</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-white font-sans text-base">{userDetails.streak}</span>
+                    <span className="text-[15px] text-zinc-300 font-sans flex items-center gap-1"><Flame className="w-4 h-4 text-orange-500" /> streak</span>
+                  </div>
+                </div>
+
+                {/* 4. Bio Section */}
+                <div className="space-y-3 text-sm font-sans pt-2">
+                  <p className="text-white whitespace-pre-wrap max-w-lg mx-auto sm:mx-0 text-center sm:text-left text-[15px] leading-relaxed">
+                    {userDetails.bio || "No biography provided."}
+                  </p>
+                </div>
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* Biography */}
-        <div className="space-y-2 pt-6 mt-6 border-t border-[#1A1A1A]">
-          <h3 className="text-[10px] font-mono uppercase tracking-widest text-on-surface-variant/40">Biography</h3>
-          <p className="text-sm text-on-surface-variant leading-relaxed font-light font-sans max-w-2xl">
-            {userDetails.bio || "No biography provided."}
-          </p>
-        </div>
-
-        {/* Real-time Counts/Metrics styled like ProfileView tags */}
-        <div className="space-y-3 pt-6 mt-6 border-t border-[#1A1A1A]">
-          <h3 className="text-[10px] font-mono uppercase tracking-widest text-on-surface-variant/40">Network Stats</h3>
-          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-5 gap-y-2">
-            <div className="flex items-center gap-1.5">
-              <Flame className="w-4 h-4 text-orange-500" />
-              <span className="text-xs text-white font-sans font-medium">{userDetails.streak} Days Streak</span>
-            </div>
-            <span className="hidden sm:block w-px h-3 bg-[#1A1A1A]"></span>
-            <div className="flex items-center gap-1.5">
-              <Users className="w-4 h-4 text-zinc-500" />
-              <span className="text-xs text-white font-sans font-medium">
-                {userDetails.followers >= 1000 ? `${(userDetails.followers / 1000).toFixed(1)}k` : userDetails.followers} Followers
-              </span>
-            </div>
-            <span className="hidden sm:block w-px h-3 bg-[#1A1A1A]"></span>
-            <div className="flex items-center gap-1.5">
-              <BookOpen className="w-4 h-4 text-zinc-500" />
-              <span className="text-xs text-white font-sans font-medium">{userDetails.following} Following</span>
             </div>
           </div>
         </div>
 
-        {/* Tab Selector: Public Posts vs Public Decks */}
-        <div className="space-y-6 pt-6 mt-6 border-t border-[#1A1A1A]">
-          <div className="flex items-center gap-6 border-b border-[#1c1c1c] pb-2">
+        {/* Tab Selector: Instagram Style */}
+        <div className="border-t border-[#1a1a1a] mt-10">
+          <div className="flex items-center justify-center gap-12 sm:gap-16">
             <button
               onClick={() => setActiveSubTab("POSTS")}
-              className={`pb-2 text-xs font-sans font-medium transition-all cursor-pointer border-b-2 relative ${
+              className={`flex items-center gap-2 py-4 text-xs font-sans font-bold tracking-widest uppercase transition-colors border-t border-transparent relative -top-px ${
                 activeSubTab === "POSTS"
                   ? "border-white text-white"
-                  : "border-transparent text-zinc-500 hover:text-zinc-300"
+                  : "text-zinc-500 hover:text-zinc-300"
               }`}
             >
-              Public Concepts ({publicPosts.length})
+              <Grid className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Concepts</span>
             </button>
             <button
               onClick={() => setActiveSubTab("DECKS")}
-              className={`pb-2 text-xs font-sans font-medium transition-all cursor-pointer border-b-2 relative ${
+              className={`flex items-center gap-2 py-4 text-xs font-sans font-bold tracking-widest uppercase transition-colors border-t border-transparent relative -top-px ${
                 activeSubTab === "DECKS"
                   ? "border-white text-white"
-                  : "border-transparent text-zinc-500 hover:text-zinc-300"
+                  : "text-zinc-500 hover:text-zinc-300"
               }`}
             >
-              Public Decks ({userDetails.decks?.length || 0})
+              <Layers className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Decks</span>
             </button>
           </div>
+        </div>
 
           {/* TAB CONTENTS */}
           <div className="max-h-[340px] overflow-y-auto pr-2 scrollbar-thin">
             {activeSubTab === "POSTS" ? (
               <div className="space-y-4">
-                {publicPosts.length === 0 ? (
+                {postsLoading ? (
+                  <div className="flex items-center gap-2 py-8 justify-center">
+                    <div className="w-4 h-4 border border-zinc-700 border-t-white rounded-full animate-spin" />
+                    <p className="text-xs text-zinc-500 font-mono uppercase tracking-wider">Loading concepts…</p>
+                  </div>
+                ) : publicPosts.length === 0 ? (
                   <p className="text-xs text-on-surface-variant/35 italic">No public lab concepts detected.</p>
                 ) : (
-                  publicPosts.map((post) => (
+                  publicPosts.slice(0, displayLimit).map((post) => (
                     <FeedCard
                       key={post.id}
                       isDarkMode={true}
@@ -597,8 +713,12 @@ export default function UserProfileView({
                       currentStep={revealedItems[post.id] ? 2 : 0}
                       maxSteps={2}
                       onToggleReveal={() => handleToggleReveal(post.id)}
+                      currentUsername={currentUsername}
                     />
                   ))
+                )}
+                {publicPosts.length > displayLimit && (
+                   <div ref={loadMoreRef} className="py-6 text-center text-xs text-zinc-500 font-mono flex justify-center"><div className="w-4 h-4 border-2 border-zinc-700 border-t-white rounded-full animate-spin" /></div>
                 )}
               </div>
             ) : (
@@ -606,7 +726,7 @@ export default function UserProfileView({
                 {(!userDetails.decks || userDetails.decks.length === 0) ? (
                   <p className="text-xs text-on-surface-variant/35 italic">No public recall decks registered.</p>
                 ) : (
-                  userDetails.decks.map((deck) => {
+                  userDetails.decks.slice(0, displayLimit).map((deck) => {
                     const isImported = userDecks.some(uDeck => uDeck.title.toLowerCase() === deck.title.toLowerCase());
                     return (
                       <div 
@@ -639,43 +759,24 @@ export default function UserProfileView({
                         <div className="flex flex-row sm:flex-col gap-2 flex-shrink-0 sm:items-end">
                           <button
                             onClick={() => {
-                              onStudyDeck(deck.title);
-                              onClose();
+                              onStudyDeck(deck.title, deck.id);
                             }}
                             className="bg-white hover:bg-zinc-200 text-black text-xs font-mono px-3 py-1.5 rounded-xs transition-colors flex items-center gap-1 cursor-pointer font-bold"
                           >
                             <span>Study</span>
                             <ArrowUpRight className="w-3 h-3 text-black" />
                           </button>
-
-                          {username !== "@kolarsaibag" && (
-                            <div>
-                              {isImported ? (
-                                <span className="text-[10px] font-mono text-green-400 flex items-center gap-1 px-3 py-1 bg-green-950/10 border border-green-950 rounded-xs">
-                                  <CheckCircle2 className="w-3 h-3 text-green-400" />
-                                  <span>Imported</span>
-                                </span>
-                              ) : (
-                                <button
-                                  onClick={() => handleImportDeckToMyLibrary(deck)}
-                                  className="text-[10px] font-mono bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-300 px-3 py-1.5 rounded-xs transition-all cursor-pointer block text-center"
-                                  disabled={!!importStatus[deck.id]}
-                                >
-                                  {importStatus[deck.id] ? "Syncing..." : "Sync Deck"}
-                                </button>
-                              )}
-                            </div>
-                          )}
                         </div>
                       </div>
                     );
                   })
                 )}
+                {userDetails.decks && userDetails.decks.length > displayLimit && (
+                   <div ref={loadMoreRef} className="py-6 text-center text-xs text-zinc-500 font-mono flex justify-center"><div className="w-4 h-4 border-2 border-zinc-700 border-t-white rounded-full animate-spin" /></div>
+                )}
               </div>
             )}
           </div>
-        </div>
-
       </div>
     
   );

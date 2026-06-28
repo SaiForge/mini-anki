@@ -1,6 +1,7 @@
 import React from 'react';
 import { FeedItem, Flashcard } from "../../types";
-import { Sparkles, Terminal, Code, Heart, Share2, CornerDownRight, CheckCircle, UserPlus, UserCheck, Check, Plus, Bookmark } from "lucide-react";
+import { Sparkles, Terminal, Code, Heart, Share2, CornerDownRight, CheckCircle, UserPlus, UserCheck, Check, Plus, Bookmark, X } from "lucide-react";
+import CommentThread from "../CommentThread";
 
 export interface FeedCardProps {
   hideHeader?: boolean;
@@ -34,9 +35,16 @@ export interface FeedCardProps {
   onToggleFollow?: (username: string) => void;
   onToggleLike?: (id: string) => void;
   setShowSaveDialog?: (id: string) => void;
-  onSaveCardToDeck?: (title: string, desc: string, deckId: string) => void;
-  onRemoveCardFromDeck?: (title: string, desc: string, deckId: string) => void;
-  onStudyDeck?: (deckName: string) => void;
+  onSaveCardToDeck?: (id: string, deckId: string) => void;
+  onRemoveCardFromDeck?: (id: string, deckId: string) => void;
+  onStudyDeck?: (deckName: string, deckId?: string) => void;
+  // Phase 2 additions
+  commentsCount?: number;
+  currentUserId?: string;
+  currentUsername?: string;
+  onDeletePost?: (id: string) => void;
+  autoOpenComments?: boolean;
+  onToggleBookmark?: (id: string) => void;
 }
 
 export function FeedCard({
@@ -63,9 +71,17 @@ export function FeedCard({
   setShowSaveDialog,
   onSaveCardToDeck,
   onRemoveCardFromDeck,
-  onStudyDeck
+  onStudyDeck,
+  commentsCount = 0,
+  currentUserId,
+  currentUsername,
+  onDeletePost,
+  autoOpenComments = false,
+  onToggleBookmark,
 }: FeedCardProps) {
-  
+  const [showSavePopover, setShowSavePopover] = React.useState(false);
+  const [saveFeedback, setSaveFeedback] = React.useState<string | null>(null);
+
   // --- STUDY MODE RENDER ---
   if (viewMode === "study" && flashcard) {
     const isJoke = flashcard.question.toLowerCase().includes("joke") || 
@@ -74,151 +90,92 @@ export function FeedCard({
     const solvedIndicator = isJoke ? "PUNCHLINE" : "ANSWER";
 
     return (
-        <div 
-          className={`group border rounded-lg transition-all duration-300 p-5 md:p-6 cursor-pointer relative shadow-md ${
+      <div 
+        className={`group border rounded-lg transition-all duration-300 cursor-pointer relative shadow-md p-6 md:p-8 flex flex-col space-y-4 ${
+          isDarkMode 
+            ? "bg-[#0b0b0b] border-zinc-800 hover:border-zinc-700"
+            : "bg-[#fdfbfb] border-[#ebdcd7] hover:shadow-[0_4px_16px_rgba(34,34,59,0.08)]"
+        }`}
+        onClick={onToggleReveal}
+      >
+        <div className="flex items-center justify-between">
+          <p className="text-[10px] font-mono text-zinc-500 font-bold tracking-[0.2em] uppercase">
+            {deckTags.length > 0 ? deckTags[0] : "CONCEPT"}
+          </p>
+          <span className={`text-[9px] font-mono px-2 py-0.5 border rounded uppercase ${
             isDarkMode 
-              ? "bg-[#0b0b0b] border-zinc-800 hover:border-zinc-700"
-              : "bg-[#fdfbfb] border-[#ebdcd7] hover:shadow-[0_4px_16px_rgba(34,34,59,0.08)]"
-          }`}
-          onClick={onToggleReveal}
-        >
-          <div className="flex items-center justify-between pb-3">
-            <span className={`font-mono text-[10px] font-bold tracking-widest uppercase ${
-              isDarkMode ? "text-zinc-400" : "text-[#22223b]"
+              ? isExpanded ? "bg-green-500/10 text-green-400 border-green-500/20" : "bg-zinc-900 text-zinc-400 border-zinc-800"
+              : isExpanded ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-[#eed9d2]/15 text-zinc-500 border-[#c9ada7]"
+          }`}>
+            {isExpanded ? "DECRYPTED" : "SECURED"}
+          </span>
+        </div>
+
+        <h3 className={`text-sm md:text-base font-sans font-semibold tracking-tight leading-snug ${
+          isDarkMode ? "text-white" : "text-[#22223b]"
+        }`}>
+          {flashcard.question}
+        </h3>
+
+        <div className="grid w-full">
+          <div className={`col-start-1 row-start-1 transition-opacity duration-300 ${isExpanded ? "opacity-100 relative z-10" : "opacity-0 pointer-events-none"}`}>
+            <p className={`text-xs font-light leading-relaxed block select-text ${
+              isDarkMode ? "text-zinc-300" : "text-[#4a4e69]"
             }`}>
-              {deckTitle || "CONCEPTS"}
-            </span>
-            <span className={`text-[10px] font-mono px-2.5 py-0.5 border rounded-xs uppercase tracking-wider ${
-              isDarkMode 
-                ? isExpanded 
-                  ? "bg-green-500/10 text-green-400 border-green-500/20" 
-                  : "bg-zinc-900/60 text-zinc-400 border-zinc-800"
-                : isExpanded 
-                  ? "bg-emerald-50 text-emerald-800 border-emerald-200 font-semibold" 
-                  : "bg-[#eed9d2]/15 text-zinc-500 border-[#c9ada7]"
-            }`}>
-              {isExpanded ? "DECRYPTED" : "SECURED"}
-            </span>
+              {flashcard.answer}
+            </p>
           </div>
-
-          <div className={`border-b mb-6 ${isDarkMode ? "border-zinc-900" : "border-[#ebdcd7]"}`}></div>
-
-          <div className="flex flex-col items-center justify-center text-center space-y-6 py-2">
-            <h3 className={`text-sm md:text-base font-bold font-sans tracking-wide leading-relaxed max-w-lg ${
-              isDarkMode ? "text-white" : "text-[#22223b]"
+          <div className={`col-start-1 row-start-1 z-20 flex flex-col justify-center transition-opacity duration-300 ${isExpanded ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
+            <div className={`py-4 border border-dashed rounded text-center flex flex-col items-center justify-center space-y-1 h-full w-full ${
+              isDarkMode ? "bg-zinc-950/20 border-zinc-900" : "bg-[#eed9d2]/10 border-[#c9ada7]"
             }`}>
-              {flashcard.question}
-            </h3>
-
-            <div className="grid w-full">
-              <div className={`col-start-1 row-start-1 w-full mx-auto max-w-lg transition-opacity duration-300 ${isExpanded ? "opacity-100 relative z-10" : "opacity-0 pointer-events-none"}`}>
-                <div className={`w-full p-5 border rounded-xs text-left ${
-                  isDarkMode 
-                    ? "bg-[#030303] border-zinc-850" 
-                    : "bg-[#eed9d2]/15 border-[#ebdcd7]"
-                }`} onClick={(e) => e.stopPropagation()}>
-                  <div className="space-y-3">
-                    <div className={`flex items-center gap-1.5 text-[9px] font-bold font-mono uppercase tracking-[0.15em] ${
-                      isDarkMode ? "text-green-400" : "text-emerald-700"
-                    }`}>
-                      <CheckCircle className="w-3.5 h-3.5" />
-                      <span>{isJoke ? "LAUGH PUNCHLINE" : "REFERENCE OUTCOME"}</span>
-                    </div>
-                    <p className={`text-xs md:text-sm font-mono leading-relaxed p-3 border rounded-xs ${
-                      isDarkMode 
-                        ? "bg-[#080808] border-zinc-900 text-zinc-200" 
-                        : "bg-[#ffffff] border-[#ebdcd7] text-[#22223b]"
-                    }`}>
-                      {flashcard.answer}
-                    </p>
-                    {flashcard.details && (
-                      <div className={`flex gap-1.5 items-start p-3 border rounded-xs ${
-                        isDarkMode 
-                          ? "bg-black/60 border-zinc-900/60" 
-                          : "bg-[#ffffff] border-[#ebdcd7]/60"
-                      }`}>
-                        <CornerDownRight className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${
-                          isDarkMode ? "text-zinc-500" : "text-[#4a4e69]/55"
-                        }`} />
-                        <div className="space-y-0.5">
-                          <span className={`text-[8px] font-mono uppercase block tracking-wider ${
-                            isDarkMode ? "text-zinc-400" : "text-[#4a4e69]/70"
-                          }`}>SYSTEM COMMENTARY</span>
-                          <p className={`text-[10px] font-light italic leading-relaxed text-left ${
-                            isDarkMode ? "text-zinc-400" : "text-[#4a4e69]"
-                          }`}>
-                            {flashcard.details}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className={`col-start-1 row-start-1 z-20 flex flex-col justify-center transition-opacity duration-300 w-full mx-auto max-w-lg ${isExpanded ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
-                <div className={`w-full border border-dashed rounded-xs py-7 px-4 text-center space-y-1.5 select-none transition-colors h-full flex flex-col items-center justify-center ${
-                  isDarkMode 
-                    ? "border-zinc-800 bg-[#060606]/40 hover:bg-[#060606]/80" 
-                    : "border-[#c9ada7] bg-[#eed9d2]/10 hover:bg-[#eed9d2]/20"
-                }`}>
-                  <Sparkles className={`w-4 h-4 mx-auto animate-pulse mb-1.5 ${
-                    isDarkMode ? "text-zinc-500" : "text-[#c2ab9a]"
-                  }`} />
-                  <span className={`text-[10px] font-mono uppercase tracking-widest block ${
-                    isDarkMode ? "text-zinc-400" : "text-[#4a4e69]/75"
-                  }`}>
-                    [ {solvedIndicator} SECURED ]
-                  </span>
-                </div>
-              </div>
+              <Terminal className={`w-4 h-4 animate-pulse ${isDarkMode ? "text-zinc-600" : "text-[#c2ab9a]"}`} />
+              <span className={`text-[9px] font-mono uppercase tracking-widest font-semibold block ${
+                isDarkMode ? "text-zinc-500" : "text-[#4a4e69]/75"
+              }`}>
+                [ {isJoke ? "PUNCHLINE LOCKED" : "SYSTEM ANSWER LOCKED"} ]
+              </span>
             </div>
-
-            <div className={`flex flex-wrap items-center justify-center gap-2 text-[10px] font-mono lowercase ${
-              isDarkMode ? "text-zinc-400" : "text-[#4a4e69]/70"
-            }`}>
-              {deckTags.map(tag => (
-                <span key={tag}>#{tag.toLowerCase()}</span>
-              ))}
-              <span>#study</span>
-            </div>
-          </div>
-
-          <div className={`border-b mt-6 mb-4 ${isDarkMode ? "border-zinc-900" : "border-[#ebdcd7]"}`}></div>
-
-          <div className="flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
-            <span className={`text-[10px] font-mono uppercase tracking-wider ${
-              isDarkMode ? "text-zinc-400" : "text-[#4a4e69]/70"
-            }`}>
-              PROGRESS: {isExpanded ? "1/1" : "0/1"}
-            </span>
-
-            <button
-              onClick={onToggleReveal}
-              className={`text-[10px] font-mono uppercase px-4 py-2 border rounded-xs font-bold tracking-widest flex items-center gap-2 transition-colors ${
-                isDarkMode 
-                  ? isExpanded 
-                    ? "bg-zinc-900 text-zinc-400 border-zinc-800 hover:bg-zinc-800 hover:text-white"
-                    : "bg-white text-black border-white hover:bg-zinc-200"
-                  : isExpanded
-                    ? "bg-[#fdfbfb] text-[#4a4e69] border-[#c9ada7] hover:bg-[#eed9d2]/20"
-                    : "bg-[#22223b] text-[#fdfbfb] border-[#22223b] hover:bg-[#4a4e69]"
-              }`}
-            >
-              {isExpanded ? (
-                <>
-                  <Sparkles className="w-3 h-3" />
-                  <span>CONCEAL SOLUTION</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-3 h-3" />
-                  <span>{isJoke ? "REVEAL PUNCHLINE" : "REVEAL ANSWER"}</span>
-                </>
-              )}
-            </button>
           </div>
         </div>
+
+        {flashcard.details && (
+          <div className="grid w-full mt-2">
+            <div className={`col-start-1 row-start-1 transition-opacity duration-300 ${isExpanded ? "opacity-100 relative z-10" : "opacity-0 pointer-events-none"}`}>
+              <div className={`p-4 border rounded font-mono text-[11px] overflow-x-auto select-text block ${
+                isDarkMode ? "bg-[#050505] border-zinc-900 text-white" : "bg-[#f4ebe8] border-[#ebdcd7] text-[#22223b]"
+              }`}>
+                <code>{flashcard.details}</code>
+              </div>
+            </div>
+            <div className={`col-start-1 row-start-1 z-20 flex flex-col justify-center transition-opacity duration-300 ${isExpanded ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
+              <div className={`py-4 border border-dashed rounded text-center flex flex-col items-center justify-center space-y-1 h-full w-full ${
+                isDarkMode ? "bg-zinc-950/20 border-zinc-900" : "bg-[#eed9d2]/10 border-[#c9ada7]"
+              }`}>
+                <Code className={`w-4 h-4 animate-pulse ${isDarkMode ? "text-zinc-650" : "text-[#c2ab9a]"}`} />
+                <span className={`text-[9px] font-mono uppercase tracking-widest font-semibold block ${
+                  isDarkMode ? "text-zinc-500" : "text-[#4a4e69]/75"
+                }`}>
+                  [ TECHNICAL DETAILS SECURED ]
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className={`pt-3 border-t flex justify-between items-center text-[10px] font-mono uppercase tracking-wider ${
+          isDarkMode ? "border-zinc-900/40 text-zinc-500" : "border-[#ebdcd7]/80 text-[#4a4e69]/70"
+        }`}>
+          <span>Progress: {isExpanded ? "1/1" : "0/1"}</span>
+          <span className={`px-2.5 py-1 rounded border transition-colors ${
+            isExpanded
+              ? isDarkMode ? "text-zinc-400 bg-zinc-950 border-zinc-900" : "text-[#4a4e69] bg-[#fdfbfb] border-[#c9ada7]"
+              : isDarkMode ? "text-white bg-zinc-900 hover:bg-zinc-800 border-zinc-800" : "text-[#fdfbfb] bg-[#22223b] hover:bg-[#4a4e69] border-[#22223b]"
+          }`}>
+            {isExpanded ? "↩ TAP TO RE-ENCRYPT" : (isJoke ? "🎭 DECRYPT PUNCHLINE" : "💡 DECRYPT EXPLANATION")}
+          </span>
+        </div>
+      </div>
     );
   }
 
@@ -226,6 +183,9 @@ export function FeedCard({
   if (!feedItem) return null;
   const item = feedItem;
   const isFullyRevealed = isSingle || currentStep === maxSteps;
+  
+  const isSavedInAnyDeck = userDecks?.some(deck => deck.cards?.some((c: any) => c.answer === item.content));
+  const isFilled = item.bookmarkedByUser || item.isPrivate || isSavedInAnyDeck;
 
   const renderTags = (item: FeedItem, centered: boolean = false) => {
     if (!item.tags || item.tags.length === 0) return null;
@@ -263,9 +223,24 @@ export function FeedCard({
             </div>
           </div>
 
-          {item.authorUsername !== "@kolarsaibag" && activeTab !== "FOLLOWING" && (
-            <div>
-              {!item.isFollowed ? (
+          {activeTab !== "FOLLOWING" && (
+            <div className="flex items-center gap-2">
+              {currentUsername && item.authorUsername === `@${currentUsername}` ? (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm("Are you sure you want to delete this concept?")) {
+                      onDeletePost && onDeletePost(item.id);
+                    }
+                  }}
+                  title="Delete Concept"
+                  className={`p-1.5 rounded transition-colors ${
+                    isDarkMode ? "text-zinc-500 hover:text-red-400 hover:bg-red-400/10" : "text-zinc-400 hover:text-red-500 hover:bg-red-50"
+                  }`}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                </button>
+              ) : !item.isFollowed ? (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -433,9 +408,17 @@ export function FeedCard({
 
             <div className="grid w-full">
               <div className={`col-start-1 row-start-1 transition-opacity duration-300 ${isFullyRevealed || currentStep >= 1 || item.category === "DECK" ? "opacity-100 relative z-10" : "opacity-0 pointer-events-none"}`}>
-                <p className="text-xs font-light text-zinc-300 leading-relaxed block select-text">
-                  {item.content}
-                </p>
+                {item.category === "DECK" ? (
+                  item.content ? (
+                    <p className={`text-xs font-light leading-relaxed block select-text py-3 border-t mt-1 ${isDarkMode ? "text-zinc-300 border-white/10" : "text-[#4a4e69] border-[#ebdcd7]/80"}`}>
+                      {item.content}
+                    </p>
+                  ) : null
+                ) : (
+                  <p className="text-xs font-light text-zinc-300 leading-relaxed block select-text">
+                    {item.content}
+                  </p>
+                )}
               </div>
               {!isSingle && item.category !== "DECK" && (
                 <div className={`col-start-1 row-start-1 z-20 flex flex-col justify-center transition-opacity duration-300 ${isFullyRevealed || currentStep >= 1 ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
@@ -471,8 +454,8 @@ export function FeedCard({
 
             {renderTags(item, false)}
 
-            {!isSingle && (
-              <div className={`pt-3 border-t flex ${item.category === "DECK" ? "justify-end" : "justify-between"} items-center text-zinc-500 text-[10px] font-mono uppercase tracking-wider ${isDarkMode ? "border-zinc-900/40" : "border-[#ebdcd7]/80"}`}>
+            {(!isSingle || item.category === "DECK") && (
+              <div className={`pt-3 border-t flex ${item.category === "DECK" ? "justify-end" : "justify-between"} items-center text-zinc-500 text-[10px] font-mono uppercase tracking-wider ${isDarkMode ? "border-white/10" : "border-[#ebdcd7]/80"}`}>
                 {item.category !== "DECK" && <span>Progress: {currentStep}/{maxSteps}</span>}
                 {currentStep === 0 && item.category !== "DECK" && (
                   <span className={`px-2.5 py-1 rounded border transition-colors ${
@@ -496,7 +479,7 @@ export function FeedCard({
                   <button 
                     onClick={(e) => {
                       e.stopPropagation();
-                      onStudyDeck && onStudyDeck(item.title || item.category);
+                      onStudyDeck && onStudyDeck(item.title || item.category, item.id);
                     }}
                     className={`font-bold tracking-widest flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 px-6 py-2 rounded-sm text-xs border ${
                       isDarkMode
@@ -537,9 +520,20 @@ export function FeedCard({
               }`}
             />
             <span className="text-[11px] font-mono">
-              {item.likes + (item.likedByUser ? 1 : 0)}
+              {item.likes + (item.likedByUser ? 0 : 0)}
             </span>
           </button>
+
+          {/* Comments */}
+          {item.category !== "DECK" && (
+            <CommentThread
+              postId={item.id}
+              initialCount={item.commentsCount ?? commentsCount}
+              currentUserId={currentUserId}
+              isDarkMode={isDarkMode}
+              autoOpen={autoOpenComments}
+            />
+          )}
 
           <button
             onClick={(e) => {
@@ -564,8 +558,101 @@ export function FeedCard({
             {item.timeLabel}
           </span>
 
-          <div className="relative">
-            {footerAction}
+          <div className="flex items-center gap-3 relative">
+            {saveFeedback ? (
+               <span className="text-[9px] font-mono text-green-400 bg-green-950/10 px-2 py-1 rounded border border-green-900/30 flex items-center gap-1.5 animated pulse">
+                <Check className="w-3 h-3 text-green-400" />
+                <span>{saveFeedback}</span>
+              </span>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowSavePopover(!showSavePopover);
+                }}
+                className="flex items-center gap-2 text-on-surface-variant hover:text-white transition-colors group/btn cursor-pointer"
+                title="Save to Personal Decks"
+              >
+                <Bookmark
+                  className={`w-4 h-4 transition-transform group-hover/btn:scale-110 ${
+                    isFilled ? "text-white fill-white" : "text-on-surface-variant"
+                  }`}
+                />
+              </button>
+            )}
+
+            {showSavePopover && (
+              <>
+                <div
+                  className="fixed inset-0 z-30 cursor-default"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowSavePopover(false);
+                  }}
+                />
+
+                <div className="absolute right-0 bottom-8 bg-surface-container-lowest border border-outline-variant/30 rounded-md p-3.5 z-40 shadow-2xl min-w-[220px] text-left animated fadeInUp">
+                  <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-outline-variant/20">
+                    <p className="text-[10px] font-sans text-on-surface uppercase tracking-wider font-semibold">
+                      SAVE TO PERSONAL DECK
+                    </p>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowSavePopover(false);
+                      }}
+                      className="text-on-surface-variant hover:text-on-surface transition-colors p-0.5 rounded cursor-pointer animate-none"
+                      title="Close"
+                    >
+                      <X className="w-3.5 h-3.5 animate-none" />
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-1 max-h-[160px] overflow-y-auto scrollbar-none">
+                    {userDecks && userDecks.map(deck => {
+                      const isSavedInThisDeck = deck.cards?.some((c: any) => c.answer === item.content);
+                      return (
+                        <button
+                          key={deck.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isSavedInThisDeck) {
+                              onRemoveCardFromDeck && onRemoveCardFromDeck(item.id, deck.id);
+                              setSaveFeedback(`Removed`);
+                            } else {
+                              onSaveCardToDeck && onSaveCardToDeck(item.id, deck.id);
+                              setSaveFeedback(`Saved`);
+                            }
+                            
+                            setTimeout(() => {
+                              setSaveFeedback(null);
+                            }, 2000);
+                            
+                            setShowSavePopover(false);
+                          }}
+                          className={`w-full text-left px-3 py-2.5 rounded-sm text-xs font-mono transition-colors flex items-center justify-between group/deckbtn ${
+                            isSavedInThisDeck 
+                              ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" 
+                              : "text-on-surface-variant hover:bg-white/5 hover:text-white"
+                          }`}
+                        >
+                          <span className="truncate max-w-[140px] block">{deck.title}</span>
+                          {isSavedInThisDeck ? (
+                            <Check className="w-3 h-3 text-emerald-400" />
+                          ) : (
+                            <Plus className="w-3 h-3 opacity-0 group-hover/deckbtn:opacity-100 transition-opacity" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div className="relative">
+              {footerAction}
+            </div>
           </div>
         </div>
       </div>

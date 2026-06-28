@@ -13,6 +13,9 @@ class UserCreate(BaseModel):
     password: str = Field(..., min_length=8, max_length=72)
     bio: Optional[str] = None
     profile_picture_url: Optional[str] = None
+    gender: Optional[str] = None
+    dob: Optional[date] = None
+    role: Optional[str] = None
 
 
 class UserLogin(BaseModel):
@@ -29,6 +32,9 @@ class UserUpdate(BaseModel):
     location: Optional[str] = None
     is_public: Optional[bool] = None
     tags: Optional[list[str]] = None
+    gender: Optional[str] = None
+    dob: Optional[date] = None
+    role: Optional[str] = None
 
 
 
@@ -53,10 +59,15 @@ class UserResponse(BaseModel):
     location: Optional[str] = None
     is_public: Optional[bool] = None
     tags: Optional[list[str]] = None
+    gender: Optional[str] = None
+    dob: Optional[date] = None
+    role: Optional[str] = None
     created_at: datetime
     is_verified: bool
     current_streak: int
     last_review_date: Optional[date]
+    followers_count: Optional[int] = 0
+    following_count: Optional[int] = 0
 
     class Config:
         from_attributes = True
@@ -71,6 +82,8 @@ class PublicUserResponse(BaseModel):
     website_url: Optional[str] = None
     location: Optional[str] = None
     tags: Optional[list[str]] = None
+    gender: Optional[str] = None
+    role: Optional[str] = None
     current_streak: int
     followers_count: int
     following_count: int

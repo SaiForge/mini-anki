@@ -9,6 +9,8 @@ export interface PublicUserResponse {
   website_url: string | null;
   location: string | null;
   tags: string[] | null;
+  gender: string | null;
+  role: string | null;
   current_streak: number;
   followers_count: number;
   following_count: number;

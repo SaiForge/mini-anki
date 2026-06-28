@@ -60,9 +60,9 @@ export default function Header({
   }, []);
 
   return (
-    <header className="sticky top-0 z-30 flex justify-between items-center w-full px-6 lg:px-8 h-20 bg-transparent pointer-events-none">
+    <header className="sticky top-0 z-30 flex justify-between items-center w-full px-4 lg:px-8 h-20 bg-transparent pointer-events-none">
       {/* Brand & Desktop Quick Filters */}
-      <div className="flex items-center gap-8 flex-1 pointer-events-auto">
+      <div className="flex items-center gap-8 flex-1 pointer-events-auto min-w-0">
         {activeTab === "feed" && feedSubTab && setFeedSubTab ? (
           <div className={`flex items-center gap-1.5 rounded-full p-1 transition-all duration-300 transform ${isVisible
               ? "opacity-100 translate-y-0 scale-100"
@@ -100,7 +100,7 @@ export default function Header({
           </div>
         ) : activeTab === "profile" || activeTab === "notifications" || activeTab === "user-profile" || activeTab === "study" ? null : (
           /* Integrated Search Bar with keyboard indicator */
-          <div className={`hidden md:flex items-center rounded-full px-4 py-2.5 w-64 lg:w-96 transition-all duration-300 transform ${isVisible
+          <div className={`flex items-center rounded-full px-4 py-2.5 w-full md:w-64 lg:w-96 transition-all duration-300 transform ${isVisible
               ? "opacity-100 translate-y-0 scale-100"
               : "opacity-0 -translate-y-12 scale-90 pointer-events-none"
             } ${isDarkMode
@@ -134,7 +134,7 @@ export default function Header({
                 <X className="w-3.5 h-3.5" />
               </Button>
             ) : (
-              <span className={`text-[10px] font-mono ml-2 select-none uppercase ${isDarkMode ? "text-on-surface-variant/40" : "text-[#4a4e69]/60"}`}>
+              <span className={`hidden sm:inline text-[10px] font-mono ml-2 select-none uppercase ${isDarkMode ? "text-on-surface-variant/40" : "text-[#4a4e69]/60"}`}>
                 ⌘K
               </span>
             )}
@@ -143,7 +143,8 @@ export default function Header({
       </div>
 
       {/* Control Actions & Workbench (Floating FAB Pill in bottom right) */}
-      <div className={`fixed bottom-20 lg:bottom-8 right-6 lg:right-8 flex items-center gap-2 rounded-full p-2.5 pointer-events-auto transition-all duration-300 z-40 transform ${isVisible
+      {["decks", "explore", "feed"].includes(activeTab) && (
+        <div className={`fixed bottom-20 lg:bottom-8 right-6 lg:right-8 flex items-center gap-2 rounded-full p-2.5 pointer-events-auto transition-all duration-300 z-40 transform ${isVisible
           ? "opacity-100 translate-y-0 scale-100"
           : "opacity-0 translate-y-16 scale-90 pointer-events-none"
         } ${isDarkMode
@@ -184,6 +185,7 @@ export default function Header({
           <MessageSquare className="w-5 h-5" />
         </Button>
       </div>
+      )}
     </header>
   );
 }

@@ -5,8 +5,15 @@ from typing import Optional
 from jose import jwt
 from passlib.context import CryptContext
 
-# Configuration
-SECRET_KEY = os.getenv("SECRET_KEY", "super-secret-jwt-key-change-me-later")
+# Configuration — all secrets MUST come from environment variables
+_SECRET_KEY = os.getenv("SECRET_KEY")
+if not _SECRET_KEY:
+    raise RuntimeError(
+        "SECRET_KEY environment variable is not set. "
+        "Set it in your .env file or deployment environment."
+    )
+SECRET_KEY: str = _SECRET_KEY
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days for our MVP
 EMAIL_VERIFICATION_SECRET = os.getenv("EMAIL_VERIFICATION_SECRET", SECRET_KEY)

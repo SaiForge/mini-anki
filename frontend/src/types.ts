@@ -14,9 +14,12 @@ export interface FeedItem {
   isQuoteStyle?: boolean;
   authorName?: string;
   authorUsername?: string;
+  authorId?: string;
   authorAvatar?: string;
+  authorAvatarUrl?: string;
   isFollowed?: boolean;
   tags?: string[];
+  commentsCount?: number;
 }
 
 export interface StudyDeck {
@@ -29,7 +32,10 @@ export interface StudyDeck {
   iconType: "terminal" | "javascript" | "database" | "security" | "science" | "brain";
   active?: boolean;
   isPrivate?: boolean;
+  isPublic?: boolean;
   tags?: string[];
+  originalDeckId?: string;
+  hasChanges?: boolean;
   cards: Flashcard[];
 }
 

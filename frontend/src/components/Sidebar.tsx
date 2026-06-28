@@ -1,14 +1,17 @@
+import { useEffect, useState } from "react";
 import { 
-  Home, 
   Compass, 
   Bell, 
   Layers, 
   User, 
   Settings, 
   Terminal,
-  Search
+  Search,
+  MessageSquare
 } from "lucide-react";
 import { Button } from "./ui/Button";
+import { getUnreadCount } from "../api/notificationsApi";
+import { getDmUnreadCount } from "../api/dmApi";
 
 interface SidebarProps {
   activeTab: string;
@@ -17,11 +20,29 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ activeTab, setActiveTab, onStudyNowClick }: SidebarProps) {
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [dmUnreadCount, setDmUnreadCount] = useState(0);
+
+  // Poll unread counts every 30s
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const [c, d] = await Promise.all([getUnreadCount(), getDmUnreadCount()]);
+        if (mounted) { setUnreadCount(c); setDmUnreadCount(d); }
+      } catch {}
+    };
+    load();
+    const interval = setInterval(load, 30000);
+    return () => { mounted = false; clearInterval(interval); };
+  }, []);
+
   const navItems = [
     { id: "decks", label: "Decks", icon: Layers },
     { id: "feed", label: "Explore", icon: Compass },
     { id: "explore", label: "Search", icon: Search },
-    { id: "notifications", label: "Notifications", icon: Bell },
+    { id: "messages", label: "Messages", icon: MessageSquare, badge: dmUnreadCount },
+    { id: "notifications", label: "Notifications", icon: Bell, badge: unreadCount },
     { id: "profile", label: "Profile", icon: User },
   ];
 
@@ -46,18 +67,31 @@ export default function Sidebar({ activeTab, setActiveTab, onStudyNowClick }: Si
           return (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => {
+                setActiveTab(item.id);
+                // Clear badge when navigating to relevant tab
+                if (item.id === "notifications") setUnreadCount(0);
+                if (item.id === "messages") setDmUnreadCount(0);
+              }}
               className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xs text-left transition-all duration-150 group cursor-pointer ${
                 isActive
                   ? "text-white bg-white/5 border-r border-white font-bold translate-x-1"
                   : "text-on-surface-variant/80 hover:bg-neutral-900/60 hover:text-white"
               }`}
             >
-              <Icon 
-                className={`w-5 h-5 transition-colors ${
-                  isActive ? "text-white" : "text-on-surface-variant group-hover:text-white"
-                }`} 
-              />
+              <div className="relative">
+                <Icon 
+                  className={`w-5 h-5 transition-colors ${
+                    isActive ? "text-white" : "text-on-surface-variant group-hover:text-white"
+                  }`} 
+                />
+                {/* Unread badge */}
+                {item.badge !== undefined && item.badge > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-white text-black text-[8px] font-bold font-mono flex items-center justify-center">
+                    {item.badge > 9 ? "9+" : item.badge}
+                  </span>
+                )}
+              </div>
               <span className="text-[13px] font-sans tracking-wide">{item.label}</span>
             </button>
           );
