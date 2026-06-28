@@ -1,5 +1,6 @@
 # OS files
 .DS_Store
+.gitignore
 
 # Logs
 *.log
@@ -40,9 +41,6 @@ frontend/.vite/
 .vscode/
 .idea/
 
-ANKI_INTERVIEW_FLASHCARDS.md
-.env
-
 backend/minianki.db
 
 # Temp / Scratch files
@@ -50,7 +48,6 @@ scratch.*
 *.scratch.*
 check_*.js
 get_*.js
-implementation_plan.md
 
 # Node
 node_modules/

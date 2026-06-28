@@ -1,8 +1,8 @@
 # Mini-Anki
 
-A full-stack spaced repetition flashcard app built with FastAPI, PostgreSQL, and React.
+A full-stack social spaced repetition platform built with FastAPI, PostgreSQL, and React.
 
-Create decks, add flashcards, and run focused study sessions with graded recall (**Again · Hard · Good · Easy**) that automatically schedules your next review using a built-in SRS engine. Streak tracking keeps you accountable, dark mode keeps your eyes comfortable at night, and email verification keeps your account secure.
+Mini-Anki takes the proven spaced repetition system (SRS) of traditional flashcards and supercharges it with social networking and community collaboration. Create decks, study with an automated SRS engine, share insights on a global feed, fork community decks, and even submit Pull Requests to improve other users' flashcards!
 
 ## Live Demo
 
@@ -14,16 +14,15 @@ Create decks, add flashcards, and run focused study sessions with graded recall 
 
 ## Highlights
 
-- **JWT authentication** — register, login, email verification, password reset
-- **Email verification** via AWS SES (verification link sent on signup)
-- **Password reset flow** — forgot-password email with time-limited token
-- **Multi-user isolation** — each user only sees their own decks and cards
-- **Default deck** — auto-created `📚 Today's Review` deck aggregates all due cards across all decks
 - **Spaced repetition engine** — interval scheduling with four grade levels (Again · Hard · Good · Easy)
+- **Default deck** — auto-created `📚 Today's Review` deck aggregates all due cards across all decks
 - **Streak tracking** — increments only when all due cards are completed; resets if a day is missed
+- **Social Feed & Profiles** — Follow users, post concepts/flashcards/code, and like/comment on community posts
+- **Deck Collaboration** — Publish decks publicly, fork other users' decks, and submit Pull Requests to suggest improvements
+- **Direct Messaging & Notifications** — Real-time DMs and in-app notifications for likes, follows, and PR activity
+- **JWT authentication** — Secure login/register flow
 - **Dark mode** — persistent light/dark toggle stored in browser, easy on the eyes at night
-- **Browser-side caching** — deck list and profile are cached in memory; navigating away and back makes zero redundant API calls
-- **Review history** — every grade is logged for future analytics
+- **Browser-side caching** — deck list and profile are cached in memory for blazing fast navigation
 - **Dockerized full stack** — single `docker compose up --build` for local startup
 
 ## Tech Stack
@@ -34,7 +33,6 @@ Create decks, add flashcards, and run focused study sessions with graded recall 
 | Backend | FastAPI, SQLAlchemy 2, Pydantic 2, Uvicorn |
 | Database | PostgreSQL (AWS RDS in production) |
 | Auth | JWT (python-jose), bcrypt / passlib |
-| Email | AWS SES (transactional emails) |
 | Hosting | Netlify (frontend), EC2 / Docker (backend), RDS (database) |
 | Infra | Docker, Docker Compose |
 
@@ -45,7 +43,6 @@ flowchart LR
 	A[React Frontend<br/>Vite · Netlify] -->|HTTP + JWT| B[FastAPI Backend<br/>Docker · EC2 :8000]
 	B --> C[(PostgreSQL<br/>AWS RDS :5432)]
 	B --> D[SRS Engine<br/>Interval Scheduler]
-	B --> E[AWS SES<br/>Email Service]
 ```
 
 ## Project Structure
@@ -169,14 +166,7 @@ Open http://localhost:5173.
 |---|---|---|---|
 | `VITE_API_URL` | No | `''` (same host) | Base URL for backend API |
 
-### AWS (for email features)
 
-AWS SES credentials are picked up from the standard AWS credential chain (`~/.aws/credentials`, environment variables, or IAM role). The sender address and region are configured in `auth_router.py`:
-
-| Constant | Value | Description |
-|---|---|---|
-| `AWS_REGION` | `us-east-2` | SES region |
-| `SES_SENDER_EMAIL` | `noreply@hirechance.in` | Verified sender address |
 
 ## API Reference
 
@@ -186,11 +176,9 @@ Base URL: `http://localhost:8000`
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| POST | `/api/auth/register` | No | Create account (sends verification email) |
-| POST | `/api/auth/login` | No | Get JWT token (requires verified email) |
+| POST | `/api/auth/register` | No | Create account |
+| POST | `/api/auth/login` | No | Get JWT token |
 | GET | `/api/auth/me` | Yes | Get current user profile and streak |
-| GET | `/api/auth/verify?token=…` | No | Verify email address |
-| POST | `/api/auth/resend-verification` | No | Resend verification email |
 | POST | `/api/auth/forgot-password` | No | Request password reset email |
 | POST | `/api/auth/reset-password` | No | Reset password with token |
 
@@ -259,20 +247,23 @@ erDiagram
     DECK ||--o{ CARD : contains
     CARD ||--|| SCHEDULE : has
     CARD ||--o{ REVIEW_LOG : tracks
+    USER ||--o{ POST : authors
+    USER ||--o{ FOLLOW : follows
+    POST ||--o{ COMMENT : has
+    DECK ||--o{ PULL_REQUEST : receives
 
     USER {
         uuid user_id PK
         string email UK
-        string password_hash
-        bool is_verified
+        string username UK
         int current_streak
-        date last_review_date
     }
     DECK {
         uuid deck_id PK
         uuid user_id FK
         string title
-        int is_default
+        boolean is_public
+        int fork_count
     }
     CARD {
         uuid card_id PK
@@ -282,28 +273,30 @@ erDiagram
     }
     SCHEDULE {
         uuid schedule_id PK
-        uuid card_id FK
         date next_review_date
         int current_interval_days
     }
-    REVIEW_LOG {
-        uuid log_id PK
-        uuid card_id FK
-        string grade_submitted
-        datetime reviewed_at
+    POST {
+        uuid post_id PK
+        uuid author_id FK
+        string content_type
+        text body
+    }
+    PULL_REQUEST {
+        uuid pr_id PK
+        uuid original_deck_id FK
+        uuid forked_deck_id FK
+        string status
     }
 ```
 
 ## Typical User Flow
 
-1. **Register** — enter email and password; a verification link is sent via AWS SES.
-2. **Verify** — click the link in your inbox to activate the account.
-3. **Login** — authenticate and receive a JWT stored in `localStorage`.
-4. **Create a deck** — organize cards by topic (e.g. "Japanese Vocab N5").
-5. **Add cards** — write front/back flashcards from the Dashboard modal.
-6. **Study** — open `📚 Today's Review` to see all due cards across every deck.
-7. **Grade** — flip each card and submit **Again / Hard / Good / Easy**.
-8. **Streak** — complete all due cards daily to build your streak; toggle dark mode for night sessions.
+1. **Register** — Create an account.
+2. **Create & Study Decks** — Organize flashcards by topic and study them daily to build your streak.
+3. **Explore the Feed** — Discover concepts, code snippets, and flashcards shared by the community.
+4. **Collaborate** — Fork public decks you like, or submit Pull Requests to suggest new cards to the original authors.
+5. **Connect** — Follow other learners, engage in comments, and send Direct Messages.
 
 ## Frontend Scripts
 
@@ -346,11 +339,7 @@ PostgreSQL instance managed via RDS. Connection string is passed via `DATABASE_U
 - Ensure the frontend origin is listed in `main.py` → `origins`.
 - Local dev: `http://localhost:5173`. Production: `https://minianki.netlify.app`.
 
-### Email verification not arriving
 
-- Check your spam/junk folder.
-- Ensure the sender email is verified in AWS SES.
-- If SES is in sandbox mode, the recipient must also be a verified address.
 
 ### Unauthorized (401) errors after login
 
@@ -369,16 +358,15 @@ PostgreSQL instance managed via RDS. Connection string is passed via `DATABASE_U
 - Do not commit `.env` files or secrets to version control.
 - Use HTTPS and secure cookie/token handling in production.
 - Password reset tokens expire in 1 hour.
-- Email verification is required before login is permitted.
 
 ## Future Improvements
 
 - Add database migrations with Alembic.
 - Add backend and frontend automated tests.
-- Add card editing and deck statistics / analytics dashboard from `ReviewLog` data.
+- Add detailed deck statistics and analytics dashboards.
 - Add refresh token flow and stricter auth hardening.
-- Add rate limiting on auth endpoints.
-- Support image/audio cards.
+- Add rate limiting on endpoints.
+- Support image/audio cards and rich text formatting.
 
 ## License
 
