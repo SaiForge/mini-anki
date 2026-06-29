@@ -24,6 +24,14 @@ from app.core.security import (
 from app.api.deps import get_current_user
 from datetime import timedelta
 from jose import JWTError, ExpiredSignatureError
+from pydantic import BaseModel
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
+
+class GoogleAuthPayload(BaseModel):
+    token: str
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
@@ -115,6 +123,62 @@ def login_user(user: UserLogin, db: Session = Depends(get_db)):
     )
 
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.post("/google", response_model=Token)
+def authenticate_with_google(payload: GoogleAuthPayload, db: Session = Depends(get_db)):
+    try:
+        idinfo = id_token.verify_oauth2_token(
+            payload.token, 
+            google_requests.Request(), 
+            GOOGLE_CLIENT_ID
+        )
+        google_sub = idinfo.get("sub")
+        email = idinfo.get("email")
+        name = idinfo.get("name")
+
+        if not google_sub or not email:
+            raise HTTPException(status_code=400, detail="Incomplete Google profile.")
+
+        user = db.query(User).filter(User.email == email).first()
+
+        if user:
+            if not user.google_sub:
+                user.google_sub = google_sub
+                if not user.full_name and name:
+                    user.full_name = name
+                db.commit()
+                db.refresh(user)
+        else:
+            hashed_password = get_password_hash(os.urandom(32).hex())
+            user = User(
+                email=email,
+                google_sub=google_sub,
+                full_name=name,
+                password_hash=hashed_password,
+                is_verified=True
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+
+            from app.models.all_models import Deck
+            default_deck = Deck(
+                title="📚 Today's Review", user_id=user.user_id, is_default=1
+            )
+            db.add(default_deck)
+            db.commit()
+
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": str(user.user_id)}, expires_delta=access_token_expires
+        )
+        return {"access_token": access_token, "token_type": "bearer"}
+
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid Google Token. Authentication Failed.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
 
 @router.get("/me", response_model=UserResponse)

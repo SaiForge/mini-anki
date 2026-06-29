@@ -13,6 +13,7 @@ class User(Base):
 
     user_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     username = Column(String(50), unique=True, index=True, nullable=True)
+    google_sub = Column(String(255), unique=True, index=True, nullable=True)
     full_name = Column(String(100), nullable=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
@@ -52,25 +53,27 @@ class Deck(Base):
     __tablename__ = "decks"
 
     deck_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
     title = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)
     category = Column(String(50), nullable=True)
     tags = Column(JSON, nullable=True)
+    original_deck_id = Column(UUID(as_uuid=True), ForeignKey("decks.deck_id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-    is_default = Column(
-        Integer, default=0, nullable=False
-    )  # 1 for default, 0 for regular
-    # Phase 3: Sharing & Discovery
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_default = Column(Integer, default=0, nullable=False)
+    
+    # Phase 3: Social/Sharing stats
     is_public = Column(Boolean, default=False)
     fork_count = Column(Integer, default=0)
     like_count = Column(Integer, default=0)
-    original_deck_id = Column(UUID(as_uuid=True), ForeignKey("decks.deck_id"), nullable=True)
+    comment_count = Column(Integer, default=0)
 
     # Relationships
-    owner = relationship("User", back_populates="decks")
+    owner = relationship("User", foreign_keys=[user_id])
     cards = relationship("Card", back_populates="deck", cascade="all, delete-orphan")
     deck_likes = relationship("DeckLike", back_populates="deck", cascade="all, delete-orphan")
+    comments = relationship("DeckComment", back_populates="deck", cascade="all, delete-orphan")
 
 
 class DeckLike(Base):
@@ -217,6 +220,22 @@ class Comment(Base):
     author = relationship("User", foreign_keys=[author_id])
     parent = relationship("Comment", back_populates="replies", remote_side="Comment.comment_id")
     replies = relationship("Comment", back_populates="parent")
+
+class DeckComment(Base):
+    __tablename__ = "deck_comments"
+
+    comment_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    deck_id = Column(UUID(as_uuid=True), ForeignKey("decks.deck_id", ondelete="CASCADE"), nullable=False)
+    author_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
+    parent_comment_id = Column(UUID(as_uuid=True), ForeignKey("deck_comments.comment_id"), nullable=True)
+    body = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    deck = relationship("Deck", back_populates="comments")
+    author = relationship("User", foreign_keys=[author_id])
+    parent = relationship("DeckComment", back_populates="replies", remote_side="DeckComment.comment_id")
+    replies = relationship("DeckComment", back_populates="parent")
 
 
 # ── Phase 4: Notifications ─────────────────────────────────────────────────────

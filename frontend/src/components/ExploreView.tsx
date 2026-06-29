@@ -41,6 +41,13 @@ export default function ExploreView({
   const [forkStatus, setForkStatus] = useState<Record<string, "idle" | "loading" | "done">>({});
   const [likeStatus, setLikeStatus] = useState<Record<string, boolean>>({});
   const [searchTab, setSearchTab] = useState<"all" | "decks" | "cards" | "users">("all");
+  const [activeExploreTab, setActiveExploreTab] = useState<"decks" | "cards">("decks");
+
+  // Explore Cards state
+  const [exploreCards, setExploreCards] = useState<any[]>([]);
+  const [cardsLoading, setCardsLoading] = useState(false);
+  const [cardsHasMore, setCardsHasMore] = useState(true);
+  const [cardsPage, setCardsPage] = useState(0);
 
   // Fetch live public decks from backend
   const loadLiveDecks = useCallback(async () => {
@@ -66,9 +73,31 @@ export default function ExploreView({
     }
   }, [searchQuery, activeCategory]);
 
+  const loadExploreCards = useCallback(async (pageNum: number) => {
+    if (cardsLoading || (!cardsHasMore && pageNum > 0)) return;
+    setCardsLoading(true);
+    try {
+      const { getExploreCards } = await import("../api/exploreApi");
+      const limit = 20;
+      const res = await getExploreCards(pageNum * limit, limit);
+      if (pageNum === 0) {
+        setExploreCards(res.items);
+      } else {
+        setExploreCards(prev => [...prev, ...res.items]);
+      }
+      setCardsHasMore(res.items.length === limit);
+      setCardsPage(pageNum);
+    } catch (e) {
+      console.error("[ExploreView] Could not load explore cards:", e);
+    } finally {
+      setCardsLoading(false);
+    }
+  }, [cardsLoading, cardsHasMore]);
+
   useEffect(() => {
     loadLiveDecks();
-  }, [loadLiveDecks]);
+    loadExploreCards(0);
+  }, []);
 
   const handleForkDeck = async (deckId: string) => {
     setForkStatus(prev => ({ ...prev, [deckId]: "loading" }));
@@ -213,7 +242,6 @@ export default function ExploreView({
                 onToggleBookmark={() => {}}
                 userDecks={decks}
                 onSaveCardToDeck={(id, deckId) => onSaveCardToDeck(item.title || "", item.content, deckId)}
-                onSaveToNewDeck={onSaveToNewDeck}
                 onRemoveCardFromDeck={(id, deckId) => onRemoveCardFromDeck(item.title || "", item.content, deckId)}
                 onToggleFollow={onToggleFollow}
                 isDarkMode={isDarkMode}
@@ -228,9 +256,37 @@ export default function ExploreView({
         </AnimatePresence>
       )}
 
+      {/* Main Explore Tabs (when not searching) */}
+      {!hasSearch && (
+        <div className={`flex items-center gap-6 border-b pb-4 mb-6 ${isDarkMode ? "border-white/10" : "border-[#c9ada7]/30"}`}>
+          {(["decks", "cards"] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveExploreTab(tab)}
+              className={`text-[13px] font-semibold transition-all duration-300 relative outline-none cursor-pointer ${
+                activeExploreTab === tab 
+                  ? (isDarkMode ? "text-white" : "text-[#22223b]") 
+                  : (isDarkMode ? "text-zinc-500 hover:text-zinc-300" : "text-[#4a4e69] hover:text-[#22223b]")
+              }`}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {activeExploreTab === tab && (
+                <motion.div 
+                  layoutId="explore-tab-indicator"
+                  transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                  className={`absolute -bottom-[17px] left-0 right-0 h-[2px] rounded-t-full ${
+                    isDarkMode ? "bg-white" : "bg-[#22223b]"
+                  }`} 
+                />
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Community Decks */}
       <AnimatePresence mode="wait">
-        {(!hasSearch || searchTab === "all" || searchTab === "decks") && (
+        {(!hasSearch && activeExploreTab === "decks") || (hasSearch && (searchTab === "all" || searchTab === "decks")) ? (
         <motion.div 
           key={`community-decks-${hasSearch ? searchTab : 'browse'}`}
           initial={{ opacity: 0, y: 10 }}
@@ -438,6 +494,65 @@ export default function ExploreView({
           </div>
         )}
         </motion.div>
+        ) : null}
+      </AnimatePresence>
+      
+      {/* Explore Cards */}
+      <AnimatePresence mode="wait">
+        {!hasSearch && activeExploreTab === "cards" && (
+          <motion.div
+            key="explore-cards"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-6 max-w-2xl mx-auto"
+          >
+            {exploreCards.length === 0 && !cardsLoading ? (
+               <div className="border border-[#1a1a1a] rounded-lg p-10 text-center space-y-2">
+                 <p className="text-zinc-500 text-xs font-mono uppercase tracking-widest">No public cards found</p>
+                 <p className="text-zinc-600 text-[11px]">Publish decks to see their cards here!</p>
+               </div>
+            ) : (
+              <div className="space-y-8">
+                {exploreCards.map(item => (
+                  <FeedCard
+                    key={item.id}
+                    feedItem={item}
+                    onToggleLike={(id) => {
+                       // Unlike a normal post, here we like the parent deck!
+                       const isLiked = likeStatus[item.deckId] ?? item.likedByUser;
+                       setLikeStatus(prev => ({ ...prev, [item.deckId]: !isLiked }));
+                       const action = isLiked ? unlikeDeck : likeDeck;
+                       action(item.deckId).catch(() => {
+                         setLikeStatus(prev => ({ ...prev, [item.deckId]: isLiked }));
+                       });
+                    }}
+                    userDecks={decks}
+                    onSaveCardToDeck={(id, deckId) => onSaveCardToDeck(item.title || "", item.content, deckId)}
+                    onRemoveCardFromDeck={(id, deckId) => onRemoveCardFromDeck(item.title || "", item.content, deckId)}
+                    onToggleFollow={onToggleFollow}
+                    isDarkMode={isDarkMode}
+                    currentUserId={currentUserId}
+                    currentUsername={currentUsername}
+                  />
+                ))}
+                
+                {/* Lazy Loading trigger */}
+                {cardsHasMore && (
+                  <div className="flex justify-center pt-4">
+                    <button
+                      onClick={() => loadExploreCards(cardsPage + 1)}
+                      disabled={cardsLoading}
+                      className="text-xs font-mono px-4 py-2 bg-zinc-900 text-zinc-400 hover:text-white rounded border border-zinc-800 disabled:opacity-50 transition-colors"
+                    >
+                      {cardsLoading ? "Loading..." : "Load More"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

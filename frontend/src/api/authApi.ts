@@ -57,6 +57,13 @@ export async function login(
   return data;
 }
 
+export async function googleLogin(token: string): Promise<TokenResponse> {
+  const { data } = await axiosClient.post<TokenResponse>("/api/auth/google", {
+    token,
+  });
+  return data;
+}
+
 export async function register(payload: {
   email: string;
   password: string;

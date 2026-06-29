@@ -8,6 +8,7 @@ from app.db.database import get_db
 from app.models.all_models import User, Post, PostLike, Bookmark, Comment, Follow
 from app.api.deps import get_current_user
 from app.api.notification_router import create_notification
+from app.db.redis import get_cache_sync, set_cache_sync
 
 router = APIRouter(tags=["Feed"])
 
@@ -159,71 +160,35 @@ def delete_post(
     db.commit()
 
 
+from app.services.feed_service import FeedService
+from datetime import datetime
+
 # ─── Feed Endpoints ─────────────────────────────────────────────────────────────
 
 @router.get("/api/feed/for-you")
 def get_for_you_feed(
-    skip: int = Query(0, ge=0),
+    cursor: Optional[datetime] = None,
     limit: int = Query(20, ge=1, le=50),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Returns posts from followed users + popular posts, newest first."""
-    # Get IDs of users current user follows
-    following_ids = [
-        f.following_id
-        for f in db.query(Follow).filter(Follow.follower_id == current_user.user_id).all()
-    ]
-    # Include own posts too
-    following_ids.append(current_user.user_id)
-
-    posts = (
-        db.query(Post)
-        .filter(Post.author_id.in_(following_ids), Post.is_private == False)
-        .order_by(desc(Post.created_at))
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-    # If feed is thin, pad with public posts from anyone
-    if len(posts) < limit:
-        extra_ids = {p.post_id for p in posts}
-        extra = (
-            db.query(Post)
-            .filter(Post.is_private == False, ~Post.post_id.in_(extra_ids))
-            .order_by(desc(Post.created_at))
-            .limit(limit - len(posts))
-            .all()
-        )
-        posts = posts + extra
-
-    return [_serialize_post(p, current_user.user_id, db) for p in posts]
+    posts = FeedService.get_for_you_feed(db, current_user.user_id, cursor, limit)
+    result = [_serialize_post(p, current_user.user_id, db) for p in posts]
+    return result
 
 
 @router.get("/api/feed/following")
 def get_following_feed(
-    skip: int = Query(0, ge=0),
+    cursor: Optional[datetime] = None,
     limit: int = Query(20, ge=1, le=50),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Strictly chronological feed from followed users only."""
-    following_ids = [
-        f.following_id
-        for f in db.query(Follow).filter(Follow.follower_id == current_user.user_id).all()
-    ]
-    if not following_ids:
-        return []
-
-    posts = (
-        db.query(Post)
-        .filter(Post.author_id.in_(following_ids), Post.is_private == False)
-        .order_by(desc(Post.created_at))
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-    return [_serialize_post(p, current_user.user_id, db) for p in posts]
+    posts = FeedService.get_following_feed(db, current_user.user_id, cursor, limit)
+    result = [_serialize_post(p, current_user.user_id, db) for p in posts]
+    return result
 
 
 @router.get("/api/users/{user_id}/posts")

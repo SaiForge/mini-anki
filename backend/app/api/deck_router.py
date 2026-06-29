@@ -12,6 +12,7 @@ from app.schemas.content_schema import (
     CardResponse,
 )
 from app.api.deps import get_current_user
+from app.services.deck_service import DeckService
 
 router = APIRouter(prefix="/api/decks", tags=["Decks & Cards"])
 
@@ -248,3 +249,16 @@ def get_deck_cards(
     if not deck:
         raise HTTPException(status_code=404, detail="Deck not found or access denied")
     return deck.cards
+
+@router.post("/{deck_id}/save/{post_id}", response_model=CardResponse, status_code=status.HTTP_201_CREATED)
+def save_post_to_deck(
+    deck_id: uuid.UUID,
+    post_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        card = DeckService.save_post_to_deck(db, deck_id, post_id, current_user.user_id)
+        return card
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

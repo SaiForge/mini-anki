@@ -72,6 +72,13 @@ export default function MessagesView({ currentUserId, searchQuery, isDarkMode = 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
+  const selectedConvRef = useRef<DmConversation | null>(null);
+
+  useEffect(() => {
+    selectedConvRef.current = selectedConv;
+  }, [selectedConv]);
+
+
 
   const loadConversations = useCallback(async () => {
     try {
@@ -87,6 +94,96 @@ export default function MessagesView({ currentUserId, searchQuery, isDarkMode = 
   }, []);
 
   useEffect(() => { loadConversations(); }, [loadConversations]);
+
+  // WebSocket setup for real-time messages
+  useEffect(() => {
+    if (!currentUserId) return;
+    const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+    const wsUrl = baseUrl.replace(/^http/, 'ws') + `/api/dm/ws/${currentUserId}`;
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: ReturnType<typeof setTimeout>;
+
+    const connectWS = () => {
+      console.log("Connecting to WebSocket:", wsUrl);
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        console.log("WebSocket connected successfully to", wsUrl);
+      };
+
+      ws.onclose = (event) => {
+        console.log("WebSocket disconnected", event.code, event.reason);
+        // Auto-reconnect after 2 seconds
+        reconnectTimeout = setTimeout(() => {
+          console.log("Attempting to reconnect WebSocket...");
+          connectWS();
+        }, 2000);
+      };
+
+      ws.onerror = (error) => {
+        console.error("WebSocket error:", error);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg: DmMessage = JSON.parse(event.data);
+          console.log("WebSocket received message:", msg);
+          const partnerId = (msg.sender_id === currentUserId ? msg.recipient_id : msg.sender_id).toLowerCase();
+          
+          setMessages(prev => {
+            const currentConv = selectedConvRef.current;
+            const currentPartnerId = currentConv?.partner_id?.toLowerCase();
+            const isCurrentThread = currentPartnerId === partnerId;
+            
+            if (isCurrentThread) {
+              if (prev.some(m => m.message_id === msg.message_id)) return prev;
+              
+              if (msg.sender_id !== currentUserId) {
+                markThreadRead(partnerId).catch(console.error);
+              }
+              return [...prev, msg];
+            }
+            return prev;
+          });
+
+          setConversations(prev => {
+            const currentConv = selectedConvRef.current;
+            const currentPartnerId = currentConv?.partner_id?.toLowerCase();
+            const isCurrentThread = currentPartnerId === partnerId;
+            const idx = prev.findIndex(c => c.partner_id.toLowerCase() === partnerId);
+            
+            if (idx >= 0) {
+              const updated = [...prev];
+              updated[idx] = {
+                ...updated[idx],
+                last_message: msg.body,
+                last_message_at: msg.created_at,
+                is_mine: msg.sender_id === currentUserId,
+                unread_count: (isCurrentThread || msg.sender_id === currentUserId) ? 0 : updated[idx].unread_count + 1
+              };
+              const [item] = updated.splice(idx, 1);
+              return [item, ...updated];
+            } else {
+              loadConversations();
+              return prev;
+            }
+          });
+        } catch (e) {
+          console.warn("WebSocket parse error", e);
+        }
+      };
+    };
+
+    connectWS();
+
+    return () => {
+      clearTimeout(reconnectTimeout);
+      if (ws) {
+        ws.onclose = null; // Prevent reconnect on intentional unmount
+        ws.close();
+      }
+    };
+  }, [currentUserId, loadConversations]);
 
   // Handle opening a chat with a specific target user
   useEffect(() => {
@@ -148,7 +245,10 @@ export default function MessagesView({ currentUserId, searchQuery, isDarkMode = 
     setSending(true);
     try {
       const msg = await sendMessage(selectedConv.partner_id, text);
-      setMessages(prev => [...prev, msg]);
+      setMessages(prev => {
+        if (prev.some(m => m.message_id === msg.message_id)) return prev;
+        return [...prev, msg];
+      });
       setConversations(prev => prev.map(c =>
         c.partner_id === selectedConv.partner_id
           ? { ...c, last_message: text, last_message_at: new Date().toISOString(), is_mine: true }

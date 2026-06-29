@@ -5,6 +5,7 @@ import { getComments, addComment, deleteComment, CommentResponse } from "../api/
 
 interface CommentThreadProps {
   postId: string;
+  targetType?: "post" | "deck";
   initialCount?: number;
   currentUserId?: string;
   isDarkMode?: boolean;
@@ -15,6 +16,7 @@ function CommentNode({
   comment,
   currentUserId,
   postId,
+  targetType = "post",
   onReplyAdded,
   onDelete,
   isDarkMode,
@@ -22,6 +24,7 @@ function CommentNode({
   comment: CommentResponse;
   currentUserId?: string;
   postId: string;
+  targetType?: "post" | "deck";
   onReplyAdded: (parentId: string, reply: CommentResponse) => void;
   onDelete: (commentId: string) => void;
   isDarkMode?: boolean;
@@ -35,7 +38,13 @@ function CommentNode({
     if (!replyText.trim()) return;
     setSubmitting(true);
     try {
-      const reply = await addComment(postId, replyText.trim(), comment.comment_id);
+      let reply: CommentResponse;
+      if (targetType === "deck") {
+        const { addDeckComment } = await import("../api/exploreApi");
+        reply = await addDeckComment(postId, replyText.trim(), comment.comment_id);
+      } else {
+        reply = await addComment(postId, replyText.trim(), comment.comment_id);
+      }
       onReplyAdded(comment.comment_id, reply);
       setReplyText("");
       setShowReplyBox(false);
@@ -85,41 +94,52 @@ function CommentNode({
           Reply
         </button>
 
-        {showReplyBox && (
-          <form onSubmit={handleReply} className="flex gap-2 mt-2">
+      {showReplyBox && (
+        <form onSubmit={handleReply} className="mt-2 pl-6 animate-fade-in">
+          <div className="relative">
             <input
-              autoFocus
+              type="text"
               value={replyText}
-              onChange={e => setReplyText(e.target.value)}
-              placeholder="Write a reply…"
-              className="flex-1 bg-transparent border border-[#1A1A1A] focus:border-zinc-600 rounded px-2 py-1 text-xs text-white outline-none font-sans placeholder:text-zinc-600"
+              onChange={(e) => setReplyText(e.target.value)}
+              placeholder="Write a reply..."
+              disabled={submitting}
+              className={`w-full text-[11px] rounded-lg py-2 pl-3 pr-10 border transition-all focus:outline-none focus:ring-1 ${
+                isDarkMode 
+                  ? "bg-zinc-900 border-zinc-800 text-white placeholder-zinc-500 focus:border-zinc-700 focus:ring-zinc-700" 
+                  : "bg-white border-[#ebdcd7] text-[#22223b] placeholder-[#4a4e69]/50 focus:border-[#c9ada7] focus:ring-[#c9ada7]"
+              }`}
             />
             <button
               type="submit"
               disabled={submitting || !replyText.trim()}
-              className="text-zinc-400 hover:text-white disabled:opacity-30 transition-colors cursor-pointer"
+              className={`absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded-md transition-colors ${
+                replyText.trim() 
+                  ? isDarkMode ? "text-white hover:bg-zinc-800" : "text-[#22223b] hover:bg-black/5" 
+                  : isDarkMode ? "text-zinc-600" : "text-[#c9ada7]/50"
+              }`}
             >
               {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
             </button>
-          </form>
-        )}
-
-        {/* Nested replies */}
-        {comment.replies && comment.replies.length > 0 && (
-          <div className="mt-3 pl-3 border-l border-[#1A1A1A] space-y-3">
-            {comment.replies.map(reply => (
-              <CommentNode
-                key={reply.comment_id}
-                comment={reply}
-                currentUserId={currentUserId}
-                postId={postId}
-                onReplyAdded={onReplyAdded}
-                onDelete={onDelete}
-                isDarkMode={isDarkMode}
-              />
-            ))}
           </div>
-        )}
+        </form>
+      )}
+
+      {comment.replies && comment.replies.length > 0 && (
+        <div className={`mt-3 pl-4 border-l-2 space-y-3 ${isDarkMode ? "border-zinc-800/50" : "border-[#ebdcd7]/50"}`}>
+          {comment.replies.map((reply) => (
+            <CommentNode
+              key={reply.comment_id}
+              comment={reply}
+              currentUserId={currentUserId}
+              postId={postId}
+              targetType={targetType}
+              onReplyAdded={onReplyAdded}
+              onDelete={onDelete}
+              isDarkMode={isDarkMode}
+            />
+          ))}
+        </div>
+      )}
       </div>
     </div>
   );
@@ -127,6 +147,7 @@ function CommentNode({
 
 export default function CommentThread({
   postId,
+  targetType = "post",
   initialCount = 0,
   currentUserId,
   isDarkMode = true,
@@ -141,22 +162,39 @@ export default function CommentThread({
 
   useEffect(() => {
     if (!isOpen) return;
-    let active = true;
+    const loadComments = async () => {
     setLoading(true);
-    getComments(postId)
-      .then(data => { if (active) setComments(data); })
-      .catch(err => console.error("Failed to load comments", err))
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [isOpen, postId]);
+    try {
+      let data;
+      if (targetType === "deck") {
+        const { getDeckComments } = await import("../api/exploreApi");
+        data = await getDeckComments(postId);
+      } else {
+        data = await getComments(postId);
+      }
+      setComments(data);
+    } catch (err) {
+      console.error("Failed to load comments", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+  loadComments();
+  }, [isOpen, postId, targetType]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!commentText.trim()) return;
     setSubmitting(true);
     try {
-      const c = await addComment(postId, commentText.trim());
-      setComments(prev => [...prev, c]);
+      let newC;
+      if (targetType === "deck") {
+        const { addDeckComment } = await import("../api/exploreApi");
+        newC = await addDeckComment(postId, commentText.trim());
+      } else {
+        newC = await addComment(postId, commentText.trim());
+      }
+      setComments(prev => [...prev, newC]);
       setCount(v => v + 1);
       setCommentText("");
     } catch (err) {

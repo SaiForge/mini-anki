@@ -47,6 +47,7 @@ def _annotate_deck(deck: Deck, user_id: uuid.UUID, db: Session) -> dict:
         "is_default": deck.is_default,
         "fork_count": deck.fork_count or 0,
         "like_count": deck.like_count or 0,
+        "comment_count": deck.comment_count or 0,
         "card_count": len(deck.cards),
         "original_deck_id": str(deck.original_deck_id) if deck.original_deck_id else None,
         "created_at": deck.created_at.isoformat() if deck.created_at else None,
@@ -136,6 +137,66 @@ def get_public_deck_cards(
     if not deck:
         raise HTTPException(status_code=404, detail="Public deck not found")
     return deck.cards
+
+
+@explore_router.get("/cards")
+def browse_public_cards(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return individual cards from public decks, formatted for the feed."""
+    from app.db.redis import get_cache_sync, set_cache_sync
+    import json
+    
+    cache_key = f"explore:cards:{current_user.user_id}:{skip}:{limit}"
+    cached = get_cache_sync(cache_key)
+    if cached:
+        return cached
+
+    cards = (
+        db.query(Card, Deck)
+        .join(Deck, Card.deck_id == Deck.deck_id)
+        .filter(Deck.is_public == True)
+        .order_by(Card.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+    result = []
+    for card, deck in cards:
+        # Determine if the user liked the deck
+        is_liked = db.query(DeckLike).filter(
+            DeckLike.deck_id == deck.deck_id,
+            DeckLike.user_id == current_user.user_id
+        ).first() is not None
+        
+        owner_name = deck.owner.full_name or deck.owner.username if deck.owner else "Anonymous"
+        
+        result.append({
+            "id": str(card.card_id),
+            "deckId": str(deck.deck_id),
+            "category": deck.category or "FLASHCARD",
+            "title": deck.title,
+            "content": card.front_text,
+            "codeSnippet": card.back_text,
+            "likes": deck.like_count or 0,
+            "likedByUser": is_liked,
+            "timeLabel": deck.created_at.isoformat() if deck.created_at else None,
+            "authorName": owner_name,
+            "authorUsername": deck.owner.username if deck.owner else None,
+            "authorId": str(deck.owner.user_id) if deck.owner else None,
+            "authorAvatarUrl": deck.owner.profile_picture_url if deck.owner else None,
+            "tags": deck.tags or [],
+            "commentsCount": deck.comment_count or 0,
+            "isDeckCard": True, # Custom flag for frontend
+        })
+        
+    set_cache_sync(cache_key, result, expire_seconds=60)
+    return {"items": result, "total": len(result)} # total here is just paginated count
+
 
 
 @explore_router.get("/search")
@@ -410,6 +471,81 @@ def unlike_deck(
         deck.like_count = max(0, (deck.like_count or 1) - 1)
     db.commit()
     return {"liked": False, "like_count": deck.like_count if deck else 0}
+
+
+# ─── Deck Comments ─────────────────────────────────────────────────────────────
+
+from pydantic import BaseModel
+
+class DeckCommentCreateSchema(BaseModel):
+    body: str
+
+@deck_share_router.get("/{deck_id}/comments")
+def get_deck_comments(
+    deck_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.models.all_models import DeckComment
+    comments = db.query(DeckComment).filter(DeckComment.deck_id == deck_id).order_by(DeckComment.created_at.asc()).all()
+    
+    def serialize_comment(c):
+        return {
+            "comment_id": str(c.comment_id),
+            "body": c.body,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+            "author_username": c.author.username if c.author else "Anonymous",
+            "author_id": str(c.author_id),
+            "parent_comment_id": str(c.parent_comment_id) if c.parent_comment_id else None
+        }
+        
+    return [serialize_comment(c) for c in comments]
+
+@deck_share_router.post("/{deck_id}/comments")
+def add_deck_comment(
+    deck_id: uuid.UUID,
+    payload: DeckCommentCreateSchema,
+    parent_comment_id: uuid.UUID | None = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.models.all_models import DeckComment
+    deck = db.query(Deck).filter(Deck.deck_id == deck_id).first()
+    if not deck:
+        raise HTTPException(status_code=404, detail="Deck not found")
+        
+    comment = DeckComment(
+        deck_id=deck_id,
+        author_id=current_user.user_id,
+        body=payload.body,
+        parent_comment_id=parent_comment_id
+    )
+    db.add(comment)
+    deck.comment_count = (deck.comment_count or 0) + 1
+    
+    if deck.user_id != current_user.user_id:
+        create_notification(
+            db=db,
+            recipient_id=deck.user_id,
+            actor_id=current_user.user_id,
+            notif_type="COMMENT",
+            message=f"@{current_user.username} commented on your deck '{deck.title}'",
+            entity_type="DECK",
+            entity_id=deck.deck_id
+        )
+        
+    db.commit()
+    db.refresh(comment)
+    
+    return {
+        "comment_id": str(comment.comment_id),
+        "body": comment.body,
+        "created_at": comment.created_at.isoformat() if comment.created_at else None,
+        "author_username": current_user.username,
+        "author_id": str(current_user.user_id),
+        "parent_comment_id": str(comment.parent_comment_id) if comment.parent_comment_id else None
+    }
+
 
 
 # ─── Phase 3: Pull Requests ───────────────────────────────────────────────────

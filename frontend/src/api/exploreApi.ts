@@ -148,3 +148,20 @@ export const rejectPullRequest = async (prId: string): Promise<{ status: string 
   const res = await API.post(`/api/decks/pull-requests/${prId}/reject`);
   return res.data;
 };
+
+// --- EXPLORE CARDS ---
+export const getExploreCards = async (skip = 0, limit = 20): Promise<{ items: any[]; total: number }> => {
+  const res = await API.get("/api/explore/cards", { params: { skip, limit } });
+  return res.data;
+};
+
+// --- DECK COMMENTS ---
+export const getDeckComments = async (deckId: string): Promise<any[]> => {
+  const res = await API.get(`/api/decks/${deckId}/comments`);
+  return res.data;
+};
+
+export const addDeckComment = async (deckId: string, body: string, parentId?: string): Promise<any> => {
+  const res = await API.post(`/api/decks/${deckId}/comments`, { body }, { params: { parent_comment_id: parentId } });
+  return res.data;
+};

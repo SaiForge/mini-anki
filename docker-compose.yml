@@ -21,6 +21,15 @@ services:
       timeout: 5s
       retries: 10
 
+  # ─── Redis ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: minianki_redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+
   # ─── FastAPI Backend ───────────────────────────────────────────────────────
   backend:
     build: ./backend
@@ -31,6 +40,7 @@ services:
     environment:
       # Override DATABASE_URL to use the local docker db in dev
       - DATABASE_URL=postgresql://minianki_user:minianki_pass@db:5432/minianki
+      - REDIS_URL=redis://redis:6379/0
     ports:
       - "8000:8000"
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload

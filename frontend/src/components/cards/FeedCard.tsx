@@ -527,7 +527,8 @@ export function FeedCard({
           {/* Comments */}
           {item.category !== "DECK" && (
             <CommentThread
-              postId={item.id}
+              postId={item.isDeckCard ? item.deckId : item.id}
+              targetType={item.isDeckCard ? "deck" : "post"}
               initialCount={item.commentsCount ?? commentsCount}
               currentUserId={currentUserId}
               isDarkMode={isDarkMode}

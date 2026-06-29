@@ -9,18 +9,49 @@ GET    /api/dm/unread-count          - total unread DM count
 DELETE /api/dm/{message_id}          - delete own message
 """
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func, desc
 from pydantic import BaseModel
 from datetime import datetime
+import json
+import asyncio
 
 from app.db.database import get_db
 from app.models.all_models import DirectMessage, User
 from app.api.deps import get_current_user
 from app.api.notification_router import create_notification
+from app.db.redis import get_redis_sync, get_redis_async
 
 router = APIRouter(prefix="/api/dm", tags=["Direct Messages"])
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: dict[uuid.UUID, list[WebSocket]] = {}
+
+    async def connect(self, websocket: WebSocket, user_id: uuid.UUID):
+        await websocket.accept()
+        if user_id not in self.active_connections:
+            self.active_connections[user_id] = []
+        self.active_connections[user_id].append(websocket)
+        print(f"WS connected for user: {user_id}. Active: {len(self.active_connections[user_id])}")
+
+    def disconnect(self, websocket: WebSocket, user_id: uuid.UUID):
+        if user_id in self.active_connections:
+            self.active_connections[user_id].remove(websocket)
+            if not self.active_connections[user_id]:
+                del self.active_connections[user_id]
+            print(f"WS disconnected for user: {user_id}")
+
+    async def send_personal_message(self, message: dict, user_id: uuid.UUID):
+        if user_id in self.active_connections:
+            for connection in self.active_connections[user_id]:
+                try:
+                    await connection.send_json(message)
+                except Exception:
+                    pass
+
+manager = ConnectionManager()
 
 
 class MessageCreate(BaseModel):
@@ -163,7 +194,22 @@ def send_message(
     # )
     # db.commit()
 
-    return _serialize_msg(msg)
+    serialized_msg = _serialize_msg(msg)
+
+    # Publish to Redis for real-time delivery
+    redis_sync = get_redis_sync()
+    if redis_sync:
+        msg_str = json.dumps(serialized_msg)
+        try:
+            print(f"Publishing to Redis dm:{user_id} and dm:{current_user.user_id}")
+            redis_sync.publish(f"dm:{user_id}", msg_str)
+            redis_sync.publish(f"dm:{current_user.user_id}", msg_str)
+        except Exception as e:
+            print(f"Redis publish error: {e}")
+    else:
+        print("Redis sync client not available")
+
+    return serialized_msg
 
 
 @router.put("/{user_id}/read")
@@ -221,3 +267,40 @@ def edit_message(
     db.commit()
     db.refresh(msg)
     return _serialize_msg(msg)
+
+
+@router.websocket("/ws/{user_id}")
+async def websocket_endpoint(websocket: WebSocket, user_id: uuid.UUID):
+    await manager.connect(websocket, user_id)
+    redis_async = get_redis_async()
+    pubsub = None
+    listener_task = None
+
+    async def redis_listener():
+        if not pubsub:
+            return
+        async for message in pubsub.listen():
+            if message["type"] == "message":
+                try:
+                    data = json.loads(message["data"])
+                    print(f"WS listener got message for {user_id}")
+                    await manager.send_personal_message(data, user_id)
+                except Exception as e:
+                    print(f"WS send error: {e}")
+
+    if redis_async:
+        pubsub = redis_async.pubsub()
+        await pubsub.subscribe(f"dm:{user_id}")
+        listener_task = asyncio.create_task(redis_listener())
+
+    try:
+        while True:
+            # Keep connection alive, listen for any messages from client
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, user_id)
+        if pubsub:
+            await pubsub.unsubscribe(f"dm:{user_id}")
+            await pubsub.close()
+        if listener_task:
+            listener_task.cancel()

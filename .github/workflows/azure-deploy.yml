@@ -1,0 +1,42 @@
+name: Deploy FastAPI Backend to Azure App Service
+
+on:
+  push:
+    branches:
+      - main  # Triggers deployment whenever code is merged into main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out Source Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python Environment
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Cache Dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+
+      - name: Install Dependencies
+        working-directory: ./backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy Artifacts to Azure Web App
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: 'Microsoft.Web-WebApp-Portal-bb9e20bb-9d36' 
+          package: ./backend

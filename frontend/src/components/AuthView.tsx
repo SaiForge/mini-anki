@@ -4,7 +4,8 @@ import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { Label } from "./ui/Label";
 import { Badge } from "./ui/Badge";
-import { checkUsername } from "../api/authApi";
+import { checkUsername, googleLogin } from "../api/authApi";
+import { GoogleLogin } from '@react-oauth/google';
 
 interface AuthViewProps {
   onLoginSuccess: (token: string) => void;
@@ -172,6 +173,23 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
     }
   };
 
+  const handleGoogleSuccess = async (credentialResponse: any) => {
+    setLoading(true);
+    setError("");
+    try {
+      if (credentialResponse.credential) {
+        const data = await googleLogin(credentialResponse.credential);
+        onLoginSuccess(data.access_token);
+      }
+    } catch (err: any) {
+      console.error("GOOGLE LOGIN ERROR CAUGHT:", err);
+      const msg = err.response?.data?.detail || err.message || "Network error";
+      setError(`[ ERROR: ${String(msg).toUpperCase()} ]`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background text-on-surface flex items-center justify-center p-4 font-sans">
       <div className="w-full max-w-lg bg-primary-container border border-outline-variant shadow-md rounded-lg">
@@ -199,6 +217,22 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
               <p className="font-mono text-xs text-primary uppercase tracking-wide">{error}</p>
             </div>
           )}
+
+          <div className="flex flex-col items-center justify-center mb-6 max-w-sm mx-auto">
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={() => setError("[ ERROR: GOOGLE LOGIN FAILED ]")}
+              useOneTap
+              theme="outline"
+              shape="rectangular"
+              text="continue_with"
+            />
+            <div className="flex items-center w-full mt-6 mb-2">
+              <div className="flex-grow border-t border-outline-variant/50"></div>
+              <span className="mx-4 text-xs font-mono text-on-surface-variant uppercase tracking-widest">OR</span>
+              <div className="flex-grow border-t border-outline-variant/50"></div>
+            </div>
+          </div>
 
           {isLogin ? (
             <form onSubmit={handleLogin} className="space-y-4 max-w-sm mx-auto p-4">

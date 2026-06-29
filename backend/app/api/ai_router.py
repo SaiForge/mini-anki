@@ -16,6 +16,9 @@ from typing import Optional, List
 
 from app.models.all_models import User
 from app.api.deps import get_current_user
+from app.services.ai_service import AIService
+from app.db.database import get_db
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/ai", tags=["AI Companion"])
 
@@ -411,4 +414,30 @@ async def extract_cards_from_pdf(
         "pages_read": len(reader.pages),
         "cards": cards,
     }
+
+
+class GeneratePromptRequest(BaseModel):
+    prompt: str
+
+@router.post("/generate")
+def generate_flashcards(
+    req: GeneratePromptRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Generate flashcards from a prompt and automatically save them as Posts."""
+    try:
+        posts = AIService.generate_flashcards(db, req.prompt, current_user.user_id)
+        # return basic post info
+        return [
+            {
+                "post_id": str(p.post_id),
+                "title": p.title,
+                "body": p.body,
+                "created_at": p.created_at.isoformat() if p.created_at else None
+            }
+            for p in posts
+        ]
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 

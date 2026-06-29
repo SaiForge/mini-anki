@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from app.db.redis import init_redis, close_redis
 
 # This creates the tables in PostgreSQL if they don't exist yet
 all_models.Base.metadata.create_all(bind=engine)
@@ -59,25 +60,34 @@ app.add_middleware(
 
 
 @app.on_event("startup")
+async def startup_event():
+    await init_redis()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await close_redis()
+
+@app.on_event("startup")
 def migrate_database_schema():
     print("Running database schema check...")
-    with engine.connect() as connection:
-        columns_to_add = [
-            "ALTER TABLE users ADD COLUMN is_verified BOOLEAN DEFAULT FALSE;",
-            "ALTER TABLE users ADD COLUMN username VARCHAR(50);",
-            "ALTER TABLE users ADD COLUMN full_name VARCHAR(100);",
-            "ALTER TABLE users ADD COLUMN bio TEXT;",
-            "ALTER TABLE users ADD COLUMN profile_picture_url VARCHAR(255);"
-        ]
-        
-        for query in columns_to_add:
-            try:
+    columns_to_add = [
+        "ALTER TABLE users ADD COLUMN is_verified BOOLEAN DEFAULT FALSE;",
+        "ALTER TABLE users ADD COLUMN username VARCHAR(50);",
+        "ALTER TABLE users ADD COLUMN full_name VARCHAR(100);",
+        "ALTER TABLE users ADD COLUMN bio TEXT;",
+        "ALTER TABLE users ADD COLUMN profile_picture_url VARCHAR(255);",
+        "ALTER TABLE decks ADD COLUMN comment_count INTEGER DEFAULT 0;",
+        "ALTER TABLE decks ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;"
+    ]
+    
+    for query in columns_to_add:
+        try:
+            with engine.begin() as connection:
                 connection.execute(text(query))
-                connection.commit()
-                print(f"Successfully executed: {query}")
-            except Exception as e:
-                # Normal if column already exists
-                pass
+            print(f"Successfully executed: {query}")
+        except Exception as e:
+            # Normal if column already exists
+            pass
 
 
 app.include_router(auth_router.router)
