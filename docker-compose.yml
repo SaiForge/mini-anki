@@ -38,8 +38,7 @@ services:
     env_file:
       - .env
     environment:
-      # Override DATABASE_URL to use the local docker db in dev
-      - DATABASE_URL=postgresql://minianki_user:minianki_pass@db:5432/minianki
+      # Uses DATABASE_URL from .env file to connect to Supabase
       - REDIS_URL=redis://redis:6379/0
     ports:
       - "8000:8000"

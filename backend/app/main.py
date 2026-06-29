@@ -24,7 +24,7 @@ CORSMiddleware
 
 # Initialize the application
 app = FastAPI(
-    title="Mini Anki API",
+    title="Study Lab API",
     description="Multi-user spaced repetition flashcard backend.",
     version="1.0.0",
 )
