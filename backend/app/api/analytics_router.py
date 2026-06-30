@@ -148,7 +148,7 @@ def get_leaderboard(
             "user_id": str(u.user_id),
             "username": u.username,
             "full_name": u.full_name,
-            "avatar_url": u.profile_picture_url,
+            "avatar_url": None,
             "streak": streak,
             "posts": posts,
             "likes_received": likes,

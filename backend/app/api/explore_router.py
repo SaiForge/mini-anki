@@ -55,7 +55,7 @@ def _annotate_deck(deck: Deck, user_id: uuid.UUID, db: Session) -> dict:
         "owner_username": deck.owner.username if deck.owner else None,
         "owner_id": str(deck.user_id) if deck.user_id else None,
         "owner_full_name": deck.owner.full_name if deck.owner else None,
-        "owner_avatar_url": deck.owner.profile_picture_url if deck.owner else None,
+        "owner_avatar_url": None,
     }
 
 
@@ -188,7 +188,7 @@ def browse_public_cards(
             "authorName": owner_name,
             "authorUsername": deck.owner.username if deck.owner else None,
             "authorId": str(deck.owner.user_id) if deck.owner else None,
-            "authorAvatarUrl": deck.owner.profile_picture_url if deck.owner else None,
+            "authorAvatarUrl": None,
             "tags": deck.tags or [],
             "commentsCount": deck.comment_count or 0,
             "isDeckCard": True, # Custom flag for frontend
@@ -264,7 +264,6 @@ def search(
                 "username": u.username,
                 "full_name": u.full_name,
                 "bio": u.bio,
-                "profile_picture_url": u.profile_picture_url,
                 "current_streak": u.current_streak,
             }
             for u in user_results

@@ -18,7 +18,6 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     bio = Column(Text, nullable=True)
-    profile_picture_url = Column(String(500), nullable=True)
     website_url = Column(String(255), nullable=True)
     location = Column(String(100), nullable=True)
     is_public = Column(Boolean, default=True)

@@ -12,7 +12,6 @@ class UserCreate(BaseModel):
     full_name: str = Field(..., min_length=1, max_length=100)
     password: str = Field(..., min_length=8, max_length=72)
     bio: Optional[str] = None
-    profile_picture_url: Optional[str] = None
     gender: Optional[str] = None
     dob: Optional[date] = None
     role: Optional[str] = None
@@ -27,7 +26,6 @@ class UserUpdate(BaseModel):
     username: Optional[str] = Field(None, min_length=3, max_length=50)
     full_name: Optional[str] = Field(None, min_length=1, max_length=100)
     bio: Optional[str] = None
-    profile_picture_url: Optional[str] = None
     website_url: Optional[str] = None
     location: Optional[str] = None
     is_public: Optional[bool] = None
@@ -54,7 +52,6 @@ class UserResponse(BaseModel):
     username: Optional[str] = None
     full_name: Optional[str] = None
     bio: Optional[str] = None
-    profile_picture_url: Optional[str] = None
     website_url: Optional[str] = None
     location: Optional[str] = None
     is_public: Optional[bool] = None
@@ -78,7 +75,6 @@ class PublicUserResponse(BaseModel):
     username: Optional[str] = None
     full_name: Optional[str] = None
     bio: Optional[str] = None
-    profile_picture_url: Optional[str] = None
     website_url: Optional[str] = None
     location: Optional[str] = None
     tags: Optional[list[str]] = None

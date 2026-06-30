@@ -50,7 +50,7 @@ const SYSTEM_PROFILES: Record<string, {
   streak: number;
   followers: number;
   following: number;
-  customAvatarUrl?: string;
+
   decks: {
     id: string;
     title: string;
@@ -364,7 +364,7 @@ export default function UserProfileView({
         streak: remoteUser.current_streak || 0,
         followers: remoteUser.followers_count || 0,
         following: remoteUser.following_count || 0,
-        customAvatarUrl: remoteUser.profile_picture_url,
+
         role: remoteUser.role || "RESEARCH NODE",
         decks: remoteDecks.map(d => mapApiDeckToStudyDeck(d))
       };
@@ -384,7 +384,7 @@ export default function UserProfileView({
             streak: 42,
             followers: 24,
             following: 130,
-            customAvatarUrl: parsed.avatarUrl,
+
             role: "LOCAL STUDENT",
             decks: userDecks.map(deck => ({
               id: deck.id,
@@ -556,18 +556,9 @@ export default function UserProfileView({
               {/* Avatar Section */}
               <div className="flex justify-center sm:justify-start flex-shrink-0">
                 <div className="relative group">
-                  {userDetails.customAvatarUrl ? (
-                    <img 
-                      src={userDetails.customAvatarUrl} 
-                      alt={userDetails.name}
-                      className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border border-[#1A1A1A] object-cover bg-black relative"
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
                     <div className={`w-24 h-24 sm:w-32 sm:h-32 rounded-full border border-[#1A1A1A] flex items-center justify-center text-3xl font-mono font-black uppercase ${userDetails.avatarBg}`}>
                       {userDetails.avatar}
                     </div>
-                  )}
                 </div>
               </div>
 
@@ -609,7 +600,7 @@ export default function UserProfileView({
                               user_id: userDetails.id,
                               username: username.startsWith('@') ? username.substring(1) : username,
                               full_name: userDetails.name !== username ? userDetails.name : null,
-                              avatar_url: userDetails.customAvatarUrl || null
+                              avatar_url: null
                             })}
                             className="px-4 py-1.5 bg-surface-container hover:bg-surface-high text-on-surface text-[10px] font-mono font-bold uppercase tracking-wider rounded transition-all flex items-center gap-1.5 cursor-pointer"
                           >

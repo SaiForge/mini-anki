@@ -72,7 +72,7 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
         username=user.username,
         full_name=user.full_name,
         bio=user.bio,
-        profile_picture_url=user.profile_picture_url,
+        
         gender=user.gender,
         dob=user.dob,
         role=user.role,
@@ -211,9 +211,6 @@ def update_user_profile(
     if user_update.bio is not None:
         current_user.bio = user_update.bio
 
-    if user_update.profile_picture_url is not None:
-        current_user.profile_picture_url = user_update.profile_picture_url
-
     if user_update.website_url is not None:
         current_user.website_url = user_update.website_url
 
@@ -332,7 +329,6 @@ def search_users(q: str, db: Session = Depends(get_db)):
             "username": u.username,
             "full_name": u.full_name,
             "bio": u.bio,
-            "profile_picture_url": u.profile_picture_url,
             "website_url": u.website_url,
             "location": u.location,
             "tags": u.tags,
@@ -363,7 +359,7 @@ def get_public_user_profile(username: str, db: Session = Depends(get_db)):
         "username": db_user.username,
         "full_name": db_user.full_name,
         "bio": db_user.bio,
-        "profile_picture_url": db_user.profile_picture_url,
+        
         "website_url": db_user.website_url,
         "location": db_user.location,
         "tags": db_user.tags,

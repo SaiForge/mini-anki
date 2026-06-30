@@ -51,9 +51,7 @@ function Avatar({
         ? "bg-zinc-800/80 border-white/10 text-zinc-300"
         : "bg-[#f2e9e4] border-[#c9ada7]/50 text-[#4a4e69]"
     }`}>
-      {url ? (
-        <img src={resolveMediaUrl(url)} className="w-full h-full object-cover" alt={name || ""} />
-      ) : initials}
+      {initials}
     </div>
   );
 }

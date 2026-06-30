@@ -5,7 +5,6 @@ export interface PublicUserResponse {
   username: string | null;
   full_name: string | null;
   bio: string | null;
-  profile_picture_url: string | null;
   website_url: string | null;
   location: string | null;
   tags: string[] | null;

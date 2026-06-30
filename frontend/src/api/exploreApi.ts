@@ -41,7 +41,6 @@ export interface SearchResponse {
     username: string | null;
     full_name: string | null;
     bio: string | null;
-    profile_picture_url: string | null;
     current_streak: number;
   }[];
 }

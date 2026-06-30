@@ -68,7 +68,7 @@ def upload_avatar(
     public_url = f"/uploads/{rel_path}"
 
     # Update user record
-    current_user.profile_picture_url = public_url
+    pass
     db.commit()
 
     return {"url": public_url, "message": "Avatar updated"}

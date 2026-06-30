@@ -209,11 +209,7 @@ export default function ExploreView({
                     <div className={`w-12 h-12 rounded-full overflow-hidden border flex-shrink-0 flex items-center justify-center font-mono text-xs uppercase ${
                       isDarkMode ? "bg-zinc-900 border-zinc-800 text-zinc-500" : "bg-[#f2e9e4] border-[#c9ada7]/50 text-[#4a4e69]"
                     }`}>
-                      {u.profile_picture_url ? (
-                        <img src={u.profile_picture_url} alt={u.username || "User"} className="w-full h-full object-cover" />
-                      ) : (
-                        (u.full_name || u.username || "?").substring(0, 2)
-                      )}
+                      {(u.full_name || u.username || "?").substring(0, 2)}
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className={`text-sm font-semibold font-sans truncate transition-colors ${

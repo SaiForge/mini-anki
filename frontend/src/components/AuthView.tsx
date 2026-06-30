@@ -31,7 +31,6 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
     gender: "",
     username: "",
     bio: "",
-    profile_picture_url: "",
     role: ""
   });
 
@@ -140,9 +139,8 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
           password: signupData.password,
           username: signupData.username,
           full_name: signupData.full_name,
-          bio: signupData.bio,
-          profile_picture_url: signupData.profile_picture_url || null,
-          gender: signupData.gender,
+          bio: signupData.bio || null,
+          gender: signupData.gender || null,
           dob: signupData.dob,
           role: signupData.role
         })
@@ -455,16 +453,6 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
                     />
                   </div>
                   
-                  <div className="space-y-1.5">
-                    <Label>Avatar URL (Optional)</Label>
-                    <Input 
-                      type="url" 
-                      value={signupData.profile_picture_url}
-                      onChange={e => handleSignupChange("profile_picture_url", e.target.value)}
-                      placeholder="https://example.com/avatar.jpg"
-                    />
-                  </div>
-
                   <div className="pt-4 mt-6 border-t border-outline-variant/30 flex justify-between items-center">
                     <Button type="button" onClick={prevStep} variant="ghost" className="gap-1.5 px-3">
                       <ArrowLeft className="w-4 h-4" /> Back

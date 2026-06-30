@@ -26,7 +26,6 @@ import { Label } from "./ui/Label";
 import { cn } from "../lib/utils";
 import { UserResponse, updateMe } from "../api/authApi";
 import { getFollowers, getFollowing } from "../api/socialApi";
-import { uploadAvatar, resolveMediaUrl } from "../api/uploadApi";
 
 interface ProfileViewProps {
   userEmail: string;
@@ -47,27 +46,18 @@ interface ProfileData {
   name: string;
   role: string;
   bio: string;
-  avatarUrl: string;
   tags: string[];
   followers: number;
   following: number;
 }
 
-const AVATAR_PRESETS = [
-  { id: "synth", label: "Synthwave", url: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=80" },
-  { id: "obsidian", label: "Obsidian", url: "https://images.unsplash.com/photo-1618005198143-e5283b519a7f?w=150&auto=format&fit=crop&q=80" },
-  { id: "amber", label: "Aura", url: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=150&auto=format&fit=crop&q=80" },
-  { id: "nebula", label: "Nebula", url: "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=150&auto=format&fit=crop&q=80" },
-  { id: "user_original", label: "Original", url: "https://lh3.googleusercontent.com/aida-public/AB6AXuDL6PO85wdDFKsVML2LXXpJBdHNX41Jo4OTHzknvlMQ3o6WwYZ_3DqYVzxckDKH3qd3TYBnhY32-6D3cADyWKHKBGIpUhLFlkt2XL3EHIgrufopv69gtz6WoD59u5ZszSaTVYzpX_84EegyZnAhOXXDIaREBC8m2hcxBzZAQcYLPs3ucyxZKgOaK8XPXNZgzzP2pfctpIQj-qHjjn6swdDzwLtw2glyyma4LaSY79elyfhxg_qTYqHkQhxko-J3VTC2b4GjFMje2FSj" }
-];
+
 
 export default function ProfileView({ userEmail, currentUser, onProfileUpdate, stats, onResetStats, isDarkMode = true, feedItems, userDecks, onStudyDeck, onDeletePost, currentUserId, currentUsername }: ProfileViewProps) {
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [successMsg, setSuccessMsg] = useState<string>("");
   const [newTagInput, setNewTagInput] = useState<string>("");
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const [activeSubTab, setActiveSubTab] = useState<"POSTS" | "DECKS">("POSTS");
   const [revealedItems, setRevealedItems] = useState<Record<string, boolean>>({});
@@ -121,7 +111,6 @@ export default function ProfileView({ userEmail, currentUser, onProfileUpdate, s
       name: userEmail.split("@")[0],
       role: "Developer",
       bio: "No biography provided. Click Edit Profile to set up your developer synopsis.",
-      avatarUrl: AVATAR_PRESETS[4].url,
       tags: [],
       followers: 0,
       following: 0
@@ -134,7 +123,6 @@ export default function ProfileView({ userEmail, currentUser, onProfileUpdate, s
       ...prev,
       name: currentUser.full_name || currentUser.username || prev.name,
       bio: currentUser.bio || prev.bio,
-      avatarUrl: currentUser.profile_picture_url || prev.avatarUrl,
       tags: currentUser.tags || prev.tags,
       role: currentUser.role || prev.role,
       followers: currentUser.followers_count !== undefined ? currentUser.followers_count : prev.followers,
@@ -161,7 +149,6 @@ export default function ProfileView({ userEmail, currentUser, onProfileUpdate, s
         full_name: draft.name,
         role: draft.role,
         bio: draft.bio,
-        profile_picture_url: draft.avatarUrl,
         tags: draft.tags,
       });
       setProfile(draft);
@@ -182,29 +169,6 @@ export default function ProfileView({ userEmail, currentUser, onProfileUpdate, s
     onResetStats();
     setSuccessMsg("Metrics ledger vacuumed completely.");
     setTimeout(() => setSuccessMsg(""), 2000);
-  };
-
-  // Phase 5: Avatar file upload handler
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsUploadingAvatar(true);
-    try {
-      const url = await uploadAvatar(file);
-      const resolved = resolveMediaUrl(url);
-      setProfile(prev => ({ ...prev, avatarUrl: resolved }));
-      setDraft(prev => ({ ...prev, avatarUrl: resolved }));
-      if (onProfileUpdate && currentUser) {
-        onProfileUpdate({ ...currentUser, profile_picture_url: resolved });
-      }
-      setSuccessMsg("Avatar updated successfully.");
-      setTimeout(() => setSuccessMsg(""), 2000);
-    } catch (err: any) {
-      alert("Upload failed: " + (err.response?.data?.detail || err.message));
-    } finally {
-      setIsUploadingAvatar(false);
-      if (avatarInputRef.current) avatarInputRef.current.value = "";
-    }
   };
 
   const addTag = () => {
@@ -250,36 +214,12 @@ export default function ProfileView({ userEmail, currentUser, onProfileUpdate, s
               
               {/* Avatar Column */}
               <div className="flex-shrink-0">
-                {/* Hidden file input for avatar upload */}
-                <input
-                  ref={avatarInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
-                  className="hidden"
-                  onChange={handleAvatarUpload}
-                />
                 <div
-                  className="relative w-24 h-24 sm:w-36 sm:h-36 group cursor-pointer mx-auto sm:mx-0"
-                  onClick={() => avatarInputRef.current?.click()}
-                  title="Click to upload new profile picture"
+                  className="relative group w-32 h-32 md:w-40 md:h-40 mx-auto md:mx-0 flex-shrink-0"
+                  title="Your Profile Picture"
                 >
-                  <img 
-                    id="profile-avatar"
-                    alt="Developer Profile Avatar" 
-                    className="w-full h-full rounded-full border border-[#1A1A1A] object-cover bg-black"
-                    src={profile.avatarUrl}
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className={`absolute inset-0 rounded-full flex items-center justify-center transition-all ${
-                    isUploadingAvatar
-                      ? "bg-black/60"
-                      : "bg-black/0 group-hover:bg-black/50"
-                  }`}>
-                    {isUploadingAvatar ? (
-                      <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <Camera className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                    )}
+                  <div className="w-full h-full rounded-full border border-[#1A1A1A] bg-zinc-900 flex items-center justify-center text-4xl font-mono text-white uppercase select-none">
+                    {profile.name ? profile.name.charAt(0) : "U"}
                   </div>
                 </div>
               </div>
@@ -393,59 +333,8 @@ export default function ProfileView({ userEmail, currentUser, onProfileUpdate, s
             {/* Split layout: Avatar selection & textual properties */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
-              {/* Avatar Selector Column */}
-              <div className="space-y-6 md:border-r md:border-[#1A1A1A] md:pr-6">
-                <div>
-                  <Label className="text-left mb-1.5" isDarkMode={isDarkMode}>Selected Avatar</Label>
-                  <div className="flex justify-center p-4">
-                    <img 
-                      alt="Avatar Draft Preview" 
-                      className="w-20 h-20 rounded-full border-2 border-white object-cover bg-black"
-                      src={draft.avatarUrl || AVATAR_PRESETS[4].url}
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = AVATAR_PRESETS[4].url;
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label className="text-left mb-2" isDarkMode={isDarkMode}>Preset Artwork</Label>
-                  <div className="grid grid-cols-5 gap-2">
-                    {AVATAR_PRESETS.map((ap) => (
-                      <button
-                        key={ap.id}
-                        type="button"
-                        title={ap.label}
-                        onClick={() => setDraft({ ...draft, avatarUrl: ap.url })}
-                        className={`w-9 h-9 rounded-full overflow-hidden border transition-all relative cursor-pointer ${
-                          draft.avatarUrl === ap.url 
-                            ? "border-primary scale-110 shadow-none border-2" 
-                            : "border-transparent hover:border-outline-variant"
-                        }`}
-                      >
-                        <img src={ap.url} className="w-full h-full object-cover" alt={ap.label} referrerPolicy="no-referrer" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <Label className="text-left mb-1" isDarkMode={isDarkMode}>Custom Image URL</Label>
-                  <Input
-                    type="url"
-                    id="edit-avatar-url"
-                    value={draft.avatarUrl}
-                    onChange={(e) => setDraft({ ...draft, avatarUrl: e.target.value })}
-                    placeholder="https://images.unsplash.com/..."
-                    isDarkMode={isDarkMode}
-                    className="text-left"
-                  />
-                </div>
-              </div>
-
               {/* General Fields Column */}
-              <div className="md:col-span-2 space-y-4">
+              <div className="md:col-span-3 space-y-4">
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>

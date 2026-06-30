@@ -132,7 +132,7 @@ def _serialize(n: Notification) -> dict:
     if n.actor:
         actor_name = n.actor.full_name or n.actor.username
         actor_username = n.actor.username
-        actor_avatar = n.actor.profile_picture_url
+        actor_avatar = None
     return {
         "notification_id": str(n.notification_id),
         "type": n.type,

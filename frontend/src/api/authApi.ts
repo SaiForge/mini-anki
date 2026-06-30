@@ -7,7 +7,6 @@ export interface UserResponse {
   username: string | null;
   full_name: string | null;
   bio: string | null;
-  profile_picture_url: string | null;
   website_url?: string | null;
   location?: string | null;
   is_public?: boolean;
@@ -27,7 +26,6 @@ export interface UserUpdatePayload {
   username?: string | null;
   full_name?: string | null;
   bio?: string | null;
-  profile_picture_url?: string | null;
   website_url?: string | null;
   location?: string | null;
   is_public?: boolean;
@@ -69,8 +67,7 @@ export async function register(payload: {
   password: string;
   username: string;
   full_name: string;
-  bio?: string;
-  profile_picture_url?: string | null;
+  bio?: string | null;
   gender?: string | null;
   dob?: string | null;
   role?: string | null;

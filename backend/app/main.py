@@ -75,8 +75,7 @@ def migrate_database_schema():
         "ALTER TABLE users ADD COLUMN username VARCHAR(50);",
         "ALTER TABLE users ADD COLUMN full_name VARCHAR(100);",
         "ALTER TABLE users ADD COLUMN bio TEXT;",
-        "ALTER TABLE users ADD COLUMN profile_picture_url VARCHAR(255);",
-        "ALTER TABLE decks ADD COLUMN comment_count INTEGER DEFAULT 0;",
+                "ALTER TABLE decks ADD COLUMN comment_count INTEGER DEFAULT 0;",
         "ALTER TABLE decks ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;"
     ]
     

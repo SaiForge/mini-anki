@@ -69,7 +69,7 @@ def _serialize_msg(m: DirectMessage) -> dict:
         "created_at": m.created_at.isoformat() if m.created_at else None,
         "sender_username": m.sender.username if m.sender else None,
         "sender_full_name": m.sender.full_name if m.sender else None,
-        "sender_avatar_url": m.sender.profile_picture_url if m.sender else None,
+        "sender_avatar_url": None,
     }
 
 
@@ -122,7 +122,7 @@ def list_conversations(
                 "partner_id": partner_id,
                 "partner_username": partner.username if partner else None,
                 "partner_full_name": partner.full_name if partner else None,
-                "partner_avatar_url": partner.profile_picture_url if partner else None,
+                "partner_avatar_url": None,
                 "last_message": m.body[:80],
                 "last_message_at": m.created_at.isoformat() if m.created_at else None,
                 "unread_count": unread,
