@@ -40,5 +40,5 @@ jobs:
       - name: Deploy Artifacts to Azure Web App
         uses: azure/webapps-deploy@v2
         with:
-          app-name: 'Microsoft.Web-WebApp-Portal-bb9e20bb-9d36' 
+          app-name: 'studylabapi' 
           package: ./backend
