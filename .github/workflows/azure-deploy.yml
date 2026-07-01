@@ -28,8 +28,8 @@ jobs:
       - name: Create and start virtual environment
         working-directory: ./backend
         run: |
-          python -m venv venv
-          source venv/bin/activate
+          python -m venv antenv
+          source antenv/bin/activate
           pip install -r requirements.txt
 
       - name: Log in to Azure

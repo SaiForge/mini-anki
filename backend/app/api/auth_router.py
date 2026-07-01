@@ -169,11 +169,13 @@ def authenticate_with_google(payload: GoogleAuthPayload, db: Session = Depends(g
             db.add(default_deck)
             db.commit()
 
+        is_new_user = user.username is None
+
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
             data={"sub": str(user.user_id)}, expires_delta=access_token_expires
         )
-        return {"access_token": access_token, "token_type": "bearer"}
+        return {"access_token": access_token, "token_type": "bearer", "is_new_user": is_new_user}
 
     except ValueError:
         raise HTTPException(status_code=401, detail="Invalid Google Token. Authentication Failed.")

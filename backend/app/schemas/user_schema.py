@@ -92,6 +92,7 @@ class PublicUserResponse(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    is_new_user: Optional[bool] = False
 
 
 class MessageResponse(BaseModel):

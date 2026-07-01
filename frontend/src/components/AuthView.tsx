@@ -22,6 +22,7 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
 
   // Signup Wizard State
   const [signupStep, setSignupStep] = useState(1);
+  const [googleTempToken, setGoogleTempToken] = useState<string | null>(null);
   const [signupData, setSignupData] = useState({
     email: "",
     password: "",
@@ -131,6 +132,33 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
     setError("");
     try {
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+      if (googleTempToken) {
+        const response = await fetch(`${apiUrl}/api/auth/me`, {
+          method: "PUT",
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${googleTempToken}`
+          },
+          body: JSON.stringify({
+            username: signupData.username,
+            full_name: signupData.full_name,
+            bio: signupData.bio || null,
+            gender: signupData.gender || null,
+            dob: signupData.dob || null,
+            role: signupData.role || null
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          const msg = typeof data.detail === "string" ? data.detail : "Profile update failed";
+          throw new Error(msg);
+        }
+        
+        onLoginSuccess(googleTempToken);
+        return;
+      }
+
       const response = await fetch(`${apiUrl}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -141,8 +169,8 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
           full_name: signupData.full_name,
           bio: signupData.bio || null,
           gender: signupData.gender || null,
-          dob: signupData.dob,
-          role: signupData.role
+          dob: signupData.dob || null,
+          role: signupData.role || null
         })
       });
       const data = await response.json();
@@ -177,7 +205,27 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
     try {
       if (credentialResponse.credential) {
         const data = await googleLogin(credentialResponse.credential);
-        onLoginSuccess(data.access_token);
+        if (data.is_new_user) {
+          setGoogleTempToken(data.access_token);
+          
+          try {
+            const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+            const meRes = await fetch(`${apiUrl}/api/auth/me`, {
+              headers: { "Authorization": `Bearer ${data.access_token}` }
+            });
+            if (meRes.ok) {
+              const meData = await meRes.json();
+              if (meData.full_name) {
+                handleSignupChange("full_name", meData.full_name);
+              }
+            }
+          } catch (e) {}
+
+          setIsLogin(false);
+          setSignupStep(3);
+        } else {
+          onLoginSuccess(data.access_token);
+        }
       }
     } catch (err: any) {
       console.error("GOOGLE LOGIN ERROR CAUGHT:", err);
@@ -216,21 +264,23 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
             </div>
           )}
 
-          <div className="flex flex-col items-center justify-center mb-6 max-w-sm mx-auto">
-            <GoogleLogin
-              onSuccess={handleGoogleSuccess}
-              onError={() => setError("[ ERROR: GOOGLE LOGIN FAILED ]")}
-              useOneTap
-              theme="outline"
-              shape="rectangular"
-              text="continue_with"
-            />
-            <div className="flex items-center w-full mt-6 mb-2">
-              <div className="flex-grow border-t border-outline-variant/50"></div>
-              <span className="mx-4 text-xs font-mono text-on-surface-variant uppercase tracking-widest">OR</span>
-              <div className="flex-grow border-t border-outline-variant/50"></div>
+          {!googleTempToken && (
+            <div className="flex flex-col items-center justify-center mb-6 max-w-sm mx-auto">
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={() => setError("[ ERROR: GOOGLE LOGIN FAILED ]")}
+                useOneTap
+                theme="outline"
+                shape="rectangular"
+                text="continue_with"
+              />
+              <div className="flex items-center w-full mt-6 mb-2">
+                <div className="flex-grow border-t border-outline-variant/50"></div>
+                <span className="mx-4 text-xs font-mono text-on-surface-variant uppercase tracking-widest">OR</span>
+                <div className="flex-grow border-t border-outline-variant/50"></div>
+              </div>
             </div>
-          </div>
+          )}
 
           {isLogin ? (
             <form onSubmit={handleLogin} className="space-y-4 max-w-sm mx-auto p-4">
@@ -360,9 +410,13 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
                   </div>
 
                   <div className="pt-4 mt-6 border-t border-outline-variant/30 flex justify-between items-center">
-                    <Button type="button" onClick={prevStep} variant="ghost" className="gap-1.5 px-3">
-                      <ArrowLeft className="w-4 h-4" /> Back
-                    </Button>
+                    {!googleTempToken ? (
+                      <Button type="button" onClick={prevStep} variant="ghost" className="gap-1.5 px-3">
+                        <ArrowLeft className="w-4 h-4" /> Back
+                      </Button>
+                    ) : (
+                      <div />
+                    )}
                     <div className="flex items-center gap-4">
                       <span className="font-mono text-[10px] text-on-surface-variant uppercase tracking-wider">Step 2 of 4</span>
                       <Button type="button" onClick={nextStep} variant="primary" className="gap-2">
@@ -404,11 +458,17 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
                   </div>
 
                   <div className="pt-4 mt-6 border-t border-outline-variant/30 flex justify-between items-center">
-                    <Button type="button" onClick={prevStep} variant="ghost" className="gap-1.5 px-3">
-                      <ArrowLeft className="w-4 h-4" /> Back
-                    </Button>
+                    {!googleTempToken ? (
+                      <Button type="button" onClick={prevStep} variant="ghost" className="gap-1.5 px-3">
+                        <ArrowLeft className="w-4 h-4" /> Back
+                      </Button>
+                    ) : (
+                      <div />
+                    )}
                     <div className="flex items-center gap-4">
-                      <span className="font-mono text-[10px] text-on-surface-variant uppercase tracking-wider">Step 3 of 4</span>
+                      <span className="font-mono text-[10px] text-on-surface-variant uppercase tracking-wider">
+                        {googleTempToken ? "Step 1 of 2" : "Step 3 of 4"}
+                      </span>
                       <Button 
                         type="button" 
                         onClick={nextStep} 
@@ -458,7 +518,9 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
                       <ArrowLeft className="w-4 h-4" /> Back
                     </Button>
                     <div className="flex items-center gap-4">
-                      <span className="font-mono text-[10px] text-on-surface-variant uppercase tracking-wider">Step 4 of 4</span>
+                      <span className="font-mono text-[10px] text-on-surface-variant uppercase tracking-wider">
+                        {googleTempToken ? "Step 2 of 2" : "Step 4 of 4"}
+                      </span>
                       <Button 
                         type="submit" 
                         disabled={loading}
@@ -480,6 +542,7 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
                 setIsLogin(!isLogin);
                 setError("");
                 setSignupStep(1);
+                setGoogleTempToken(null);
               }}
               className="text-[11px] font-mono tracking-wider hover:bg-surface-container-low"
             >

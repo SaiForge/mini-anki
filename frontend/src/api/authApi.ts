@@ -38,6 +38,7 @@ export interface UserUpdatePayload {
 export interface TokenResponse {
   access_token: string;
   token_type: string;
+  is_new_user?: boolean;
 }
 
 export interface MessageResponse {
