@@ -34,6 +34,7 @@ import os
 # CORS Configuration — read from env so it works in both local dev and production
 _frontend_url = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173")
 _vite_url = os.getenv("VITE_API_URL", "")  # sometimes frontend sends this
+_azure_url = os.getenv("AZURE_STATIC_WEB_APP_URL", "")
 
 origins = [
     "http://localhost:5173",
@@ -41,6 +42,14 @@ origins = [
     "http://localhost:5174",
     _frontend_url,
 ]
+
+if _azure_url:
+    origins.append(_azure_url)
+    # Also add the URL with a trailing slash just in case
+    if _azure_url.endswith("/"):
+        origins.append(_azure_url.rstrip("/"))
+    else:
+        origins.append(_azure_url + "/")
 # Also allow the deployed EC2 frontend (port 5173)
 _ec2_ip = "18.118.210.98"
 origins += [f"http://{_ec2_ip}:5173", f"http://{_ec2_ip}", f"https://{_ec2_ip}"]
