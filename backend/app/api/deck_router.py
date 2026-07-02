@@ -59,39 +59,45 @@ def get_user_decks(
 
     # Only return decks belonging to this specific user (Tenant Isolation)
     decks = db.query(Deck).filter(Deck.user_id == current_user.user_id).all()
-    # Annotate each deck with its real card count + sharing fields
+    if not decks:
+        return []
+        
+    deck_ids = [d.deck_id for d in decks]
     today = datetime.now(timezone.utc).date()
+    
+    from sqlalchemy import func
+    
+    # 1. Batch total card counts
+    card_counts = dict(
+        db.query(Card.deck_id, func.count(Card.card_id))
+        .filter(Card.deck_id.in_(deck_ids))
+        .group_by(Card.deck_id).all()
+    )
+    
+    # 2. Batch due card counts
+    due_counts = dict(
+        db.query(Card.deck_id, func.count(Card.card_id))
+        .join(Schedule)
+        .filter(Card.deck_id.in_(deck_ids), Schedule.next_review_date <= today)
+        .group_by(Card.deck_id).all()
+    )
+    
+    total_due_count = sum(due_counts.values())
+    
     for deck in decks:
         if deck.is_default:
-            user_deck_ids = [d.deck_id for d in decks]
-            due_cards_count = (
-                db.query(Card)
-                .join(Schedule)
-                .filter(Card.deck_id.in_(user_deck_ids), Schedule.next_review_date <= today)
-                .count()
-            )
-            deck.card_count = due_cards_count
-            deck.due_count = due_cards_count
+            deck.card_count = total_due_count
+            deck.due_count = total_due_count
         else:
-            deck.card_count = len(deck.cards)
-            due_cards_count = (
-                db.query(Card)
-                .join(Schedule)
-                .filter(Card.deck_id == deck.deck_id, Schedule.next_review_date <= today)
-                .count()
-            )
-            deck.due_count = due_cards_count
-        
+            deck.card_count = card_counts.get(deck.deck_id, 0)
+            deck.due_count = due_counts.get(deck.deck_id, 0)
+            
         deck.has_changes = False
         if deck.original_deck_id:
-            original_deck = db.query(Deck).filter(Deck.deck_id == deck.original_deck_id).first()
-            if original_deck:
-                orig_cards = {(c.front_text, c.back_text) for c in original_deck.cards}
-                fork_cards = {(c.front_text, c.back_text) for c in deck.cards}
-                # Check if fork has cards that are not in original
-                new_cards = fork_cards - orig_cards
-                if new_cards:
-                    deck.has_changes = True
+            # Fetch raw tuples instead of full ORM models to save massive memory/CPU
+            fork_cards = db.query(Card.front_text, Card.back_text).filter(Card.deck_id == deck.deck_id).all()
+            orig_cards = db.query(Card.front_text, Card.back_text).filter(Card.deck_id == deck.original_deck_id).all()
+            deck.has_changes = len(set(fork_cards) - set(orig_cards)) > 0
 
     return decks
 

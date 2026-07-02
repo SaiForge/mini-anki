@@ -120,7 +120,7 @@ export default function DecksView({
     return (
       <div
         key={deck.id}
-        className="relative overflow-hidden group flex flex-col md:flex-row items-center justify-between px-6 pt-6 pb-8 md:pb-7 bg-[#0c0c0c] hover:bg-[#131313] rounded-lg transition-colors duration-200"
+        className="relative group flex flex-col md:flex-row items-center justify-between px-6 pt-6 pb-8 md:pb-7 bg-[#0c0c0c] hover:bg-[#131313] rounded-lg transition-colors duration-200"
       >
         {/* Padded Progress Bar */}
         <div className="absolute bottom-3 left-6 right-6 h-[3px] bg-black/10 dark:bg-white/5 rounded-full overflow-hidden z-0">
@@ -220,7 +220,7 @@ export default function DecksView({
                       className="fixed inset-0 z-10"
                       onClick={(e) => { e.stopPropagation(); setOpenMenuId(null); }}
                     />
-                    <div className="absolute right-0 top-full mt-1 w-48 bg-[#0c0c0c] border border-[#1A1A1A] rounded shadow-lg overflow-hidden z-20 flex flex-col py-1">
+                    <div className="absolute right-0 top-full mt-1 w-48 bg-surface-container-lowest border border-outline-variant/30 rounded shadow-xl overflow-hidden z-20 flex flex-col py-1">
                       <button
                         onClick={async (e) => {
                           e.stopPropagation();
@@ -241,7 +241,7 @@ export default function DecksView({
                           }
                         }}
                         disabled={publishingId === deck.id}
-                        className="px-4 py-2.5 text-left text-[11px] font-mono tracking-wider text-on-surface hover:bg-[#131313] flex items-center gap-3 transition-colors"
+                        className="px-4 py-2.5 text-left text-[11px] font-mono tracking-wider text-on-surface hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-3 transition-colors"
                       >
                         {publishingId === deck.id
                           ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -256,7 +256,7 @@ export default function DecksView({
                           setOpenMenuId(null);
                           setConfirmDeleteDeck(deck);
                         }}
-                        className="px-4 py-2.5 text-left text-[11px] font-mono tracking-wider text-red-500 hover:bg-[#131313] flex items-center gap-3 transition-colors"
+                        className="px-4 py-2.5 text-left text-[11px] font-mono tracking-wider text-red-500 hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-3 transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
                         DELETE DECK

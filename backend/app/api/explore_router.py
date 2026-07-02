@@ -30,33 +30,50 @@ deck_share_router = APIRouter(prefix="/api/decks", tags=["Deck Sharing"])
 
 
 # ─── Helper ───────────────────────────────────────────────────────────────────
-def _annotate_deck(deck: Deck, user_id: uuid.UUID, db: Session) -> dict:
-    """Return a plain dict representation of a Deck with extra fields."""
-    is_liked = db.query(DeckLike).filter(
-        DeckLike.deck_id == deck.deck_id,
-        DeckLike.user_id == user_id
-    ).first() is not None
+from typing import List
 
-    return {
-        "deck_id": str(deck.deck_id),
-        "title": deck.title,
-        "description": deck.description,
-        "category": deck.category,
-        "tags": deck.tags,
-        "is_public": deck.is_public,
-        "is_default": deck.is_default,
-        "fork_count": deck.fork_count or 0,
-        "like_count": deck.like_count or 0,
-        "comment_count": deck.comment_count or 0,
-        "card_count": len(deck.cards),
-        "original_deck_id": str(deck.original_deck_id) if deck.original_deck_id else None,
-        "created_at": deck.created_at.isoformat() if deck.created_at else None,
-        "is_liked": is_liked,
-        "owner_username": deck.owner.username if deck.owner else None,
-        "owner_id": str(deck.user_id) if deck.user_id else None,
-        "owner_full_name": deck.owner.full_name if deck.owner else None,
-        "owner_avatar_url": None,
+def _annotate_decks_batched(decks: List[Deck], user_id: uuid.UUID, db: Session) -> List[dict]:
+    """Return a plain dict representation of Decks with extra fields batched efficiently."""
+    if not decks:
+        return []
+        
+    deck_ids = [d.deck_id for d in decks]
+    
+    card_counts = dict(
+        db.query(Card.deck_id, func.count(Card.card_id))
+        .filter(Card.deck_id.in_(deck_ids))
+        .group_by(Card.deck_id).all()
+    )
+    
+    liked_deck_ids = {
+        row[0] for row in 
+        db.query(DeckLike.deck_id)
+        .filter(DeckLike.deck_id.in_(deck_ids), DeckLike.user_id == user_id).all()
     }
+
+    result = []
+    for deck in decks:
+        result.append({
+            "deck_id": str(deck.deck_id),
+            "title": deck.title,
+            "description": deck.description,
+            "category": deck.category,
+            "tags": deck.tags,
+            "is_public": deck.is_public,
+            "is_default": deck.is_default,
+            "fork_count": deck.fork_count or 0,
+            "like_count": deck.like_count or 0,
+            "comment_count": deck.comment_count or 0,
+            "card_count": card_counts.get(deck.deck_id, 0),
+            "original_deck_id": str(deck.original_deck_id) if deck.original_deck_id else None,
+            "created_at": deck.created_at.isoformat() if deck.created_at else None,
+            "is_liked": deck.deck_id in liked_deck_ids,
+            "owner_username": deck.owner.username if deck.owner else None,
+            "owner_id": str(deck.user_id) if deck.user_id else None,
+            "owner_full_name": deck.owner.full_name if deck.owner else None,
+            "owner_avatar_url": None,
+        })
+    return result
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -73,6 +90,11 @@ def browse_public_decks(
     current_user: User = Depends(get_current_user),
 ):
     """Browse all public decks with optional category/search filter."""
+    from app.db.redis import get_cache_sync, set_cache_sync
+    cache_key = f"explore:decks:{category or 'all'}:{q or 'none'}:{skip}:{limit}"
+    cached = get_cache_sync(cache_key)
+    if cached: return cached
+
     query = (
         db.query(Deck)
         .filter(Deck.is_public == True)
@@ -90,10 +112,13 @@ def browse_public_decks(
         )
     total = query.count()
     decks = query.order_by(Deck.created_at.desc()).offset(skip).limit(limit).all()
-    return {
+    result = {
         "total": total,
-        "items": [_annotate_deck(d, current_user.user_id, db) for d in decks],
+        "items": _annotate_decks_batched(decks, current_user.user_id, db),
     }
+    
+    set_cache_sync(cache_key, result, expire_seconds=300)
+    return result
 
 
 @explore_router.get("/decks/trending")
@@ -103,6 +128,11 @@ def trending_decks(
     current_user: User = Depends(get_current_user),
 ):
     """Return top public decks by (like_count + fork_count) score."""
+    from app.db.redis import get_cache_sync, set_cache_sync
+    cache_key = f"explore:trending:{limit}"
+    cached = get_cache_sync(cache_key)
+    if cached: return cached
+
     decks = (
         db.query(Deck)
         .filter(Deck.is_public == True)
@@ -110,7 +140,10 @@ def trending_decks(
         .limit(limit)
         .all()
     )
-    return [_annotate_deck(d, current_user.user_id, db) for d in decks]
+    result = _annotate_decks_batched(decks, current_user.user_id, db)
+    
+    set_cache_sync(cache_key, result, expire_seconds=300)
+    return result
 
 
 @explore_router.get("/decks/{deck_id}")
@@ -123,7 +156,7 @@ def get_public_deck(
     deck = db.query(Deck).filter(Deck.deck_id == deck_id, Deck.is_public == True).first()
     if not deck:
         raise HTTPException(status_code=404, detail="Public deck not found")
-    return _annotate_deck(deck, current_user.user_id, db)
+    return _annotate_decks_batched([deck], current_user.user_id, db)[0]
 
 
 @explore_router.get("/decks/{deck_id}/cards", response_model=list[CardResponse])
@@ -257,7 +290,7 @@ def search(
     )
 
     return {
-        "decks": [_annotate_deck(d, current_user.user_id, db) for d in deck_results],
+        "decks": _annotate_decks_batched(deck_results, current_user.user_id, db),
         "users": [
             {
                 "user_id": str(u.user_id),
@@ -309,7 +342,7 @@ def update_deck_metadata(
         deck.tags = payload["tags"]
     db.commit()
     db.refresh(deck)
-    return _annotate_deck(deck, current_user.user_id, db)
+    return _annotate_decks_batched([deck], current_user.user_id, db)[0]
 
 
 @deck_share_router.post("/{deck_id}/publish", status_code=status.HTTP_200_OK)
@@ -369,7 +402,7 @@ def fork_deck(
         Deck.user_id == current_user.user_id,
     ).first()
     if already:
-        return _annotate_deck(already, current_user.user_id, db)
+        return _annotate_decks_batched([already], current_user.user_id, db)[0]
 
     # Create the forked deck
     forked = Deck(
@@ -415,7 +448,7 @@ def fork_deck(
     
     db.commit()
     db.refresh(forked)
-    return _annotate_deck(forked, current_user.user_id, db)
+    return _annotate_decks_batched([forked], current_user.user_id, db)[0]
 
 
 @deck_share_router.post("/{deck_id}/like", status_code=status.HTTP_200_OK)

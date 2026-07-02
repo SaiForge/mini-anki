@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
+import { useQuery } from './lib/useQuery';
 import { motion, AnimatePresence } from "motion/react";
 import {
   FeedItem,
@@ -124,79 +125,86 @@ export default function App() {
   }, [isDarkMode]);
 
   // Fetch real decks and merge with any locally-stored UI metadata
-  const fetchDecksData = useCallback(() => {
-    setDecksLoading(true);
-    getDecks()
-      .then(async (apiDecks) => {
-        const mappedDecks = await Promise.all(
-          apiDecks.map(async (d) => {
-            const mapped = mapApiDeckToStudyDeck(d);
-            try {
-              const apiCards = await getDeckCards(mapped.id);
-              mapped.cards = apiCards.map(c => ({
-                id: c.card_id,
-                question: c.front_text,
-                answer: c.back_text,
-              }));
-            } catch (e) {
-              console.error(`Failed to load cards for deck ${mapped.id}`, e);
-            }
-            return mapped;
-          })
-        );
-        setDecks(mappedDecks);
-      })
-      .catch((err) => {
-        console.error("Failed to fetch decks", err);
-      })
-      .finally(() => setDecksLoading(false));
-  }, []);
+  const { data: apiDecks, isLoading: isApiDecksLoading, refetch: fetchDecksData } = useQuery({
+    queryKey: ['decks'],
+    queryFn: async () => {
+      const apiDecks = await getDecks();
+      const mappedDecks = await Promise.all(
+        apiDecks.map(async (d) => {
+          const mapped = mapApiDeckToStudyDeck(d);
+          try {
+            const apiCards = await getDeckCards(mapped.id);
+            mapped.cards = apiCards.map(c => ({
+              id: c.card_id,
+              question: c.front_text,
+              answer: c.back_text,
+            }));
+          } catch (e) {
+            console.error(`Failed to load cards for deck ${mapped.id}`, e);
+          }
+          return mapped;
+        })
+      );
+      return mappedDecks;
+    },
+    enabled: isAuthenticated,
+  });
+
+  useEffect(() => {
+    if (apiDecks) {
+      setDecks(apiDecks);
+    }
+  }, [apiDecks]);
+
+  useEffect(() => {
+    setDecksLoading(isApiDecksLoading);
+  }, [isApiDecksLoading]);
 
   // Bootstrap: load user profile + real decks from the backend when authenticated
-  useEffect(() => {
-    if (!isAuthenticated) {
-      setDecksLoading(false);
-      return;
-    }
-    // Fetch logged-in user
-    getMe()
-      .then((user) => {
+  useQuery({
+    queryKey: ['me'],
+    queryFn: async () => {
+      try {
+        const user = await getMe();
         setCurrentUser(user);
         setStats((prev) => ({
           ...prev,
           dailyStreak: user.current_streak,
         }));
-      })
-      .catch(() => {
-        // Token is invalid/expired — force re-login
+        return user;
+      } catch (e) {
         handleLogout();
-      });
+        throw e;
+      }
+    },
+    enabled: isAuthenticated,
+  });
 
-    // Fetch real decks and merge with any locally-stored UI metadata
-    fetchDecksData();
+  const { data: apiTrending } = useQuery({
+    queryKey: ['trendingDecks'],
+    queryFn: async () => {
+      const trending = await getTrendingDecks(10);
+      return trending.map(d => ({
+        id: d.deck_id,
+        category: "DECK",
+        title: d.title,
+        content: d.description || "",
+        likes: d.like_count,
+        likedByUser: d.is_liked,
+        timeLabel: new Date(d.created_at).toLocaleDateString(),
+        authorName: d.owner_full_name || d.owner_username || "Anonymous",
+        authorUsername: d.owner_username || "anonymous",
+        authorId: d.owner_id,
+        authorAvatarUrl: d.owner_avatar_url || undefined,
+        tags: (d.tags && d.tags.length > 0) ? d.tags : (d.category ? [d.category.toLowerCase(), "study", "deck"] : ["study", "deck"]),
+      }));
+    },
+    enabled: isAuthenticated,
+  });
 
-    // Fetch trending public decks for the "DECKS" feed toggle
-    getTrendingDecks(10)
-      .then((trending) => {
-        const mapped: FeedItem[] = trending.map(d => ({
-          id: d.deck_id,
-          category: "DECK",
-          title: d.title,
-          content: d.description || "",
-          likes: d.like_count,
-          likedByUser: d.is_liked,
-          timeLabel: new Date(d.created_at).toLocaleDateString(),
-          authorName: d.owner_full_name || d.owner_username || "Anonymous",
-          authorUsername: d.owner_username || "anonymous",
-          authorId: d.owner_id,
-          authorAvatarUrl: d.owner_avatar_url || undefined,
-          tags: (d.tags && d.tags.length > 0) ? d.tags : (d.category ? [d.category.toLowerCase(), "study", "deck"] : ["study", "deck"]),
-        }));
-        setPublicDecksFeed(mapped);
-      })
-      .catch(console.error);
-
-  }, [isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (apiTrending) setPublicDecksFeed(apiTrending);
+  }, [apiTrending]);
 
   // Global WebSocket for Notifications
   useEffect(() => {
@@ -496,8 +504,9 @@ export default function App() {
   }, []);
 
   // Load feed from backend
-  const loadFeed = useCallback(async () => {
-    try {
+  const { data: apiFeed, refetch: loadFeed } = useQuery({
+    queryKey: ['feed', feedSubTab],
+    queryFn: async () => {
       const data = await getForYouFeed(0, 30);
       const mapped: FeedItem[] = data.map((p: PostResponse) => ({
         id: p.post_id,
@@ -520,23 +529,21 @@ export default function App() {
         tags: [],
         commentsCount: p.comments_count,
       }));
-      // Prepend mock items for demo flavour but put real posts first
-      setFeedItems(prev => {
-        const mockItems = prev.filter(i => !i.id.startsWith("post-") ? false : true);
-        const existingIds = new Set(mapped.map(m => m.id));
-        const mockOnly = mockItems.filter(m => !existingIds.has(m.id));
-        return [...mapped, ...mockOnly];
-      });
-    } catch (e) {
-      console.warn("Could not load feed from backend, using mock data", e);
-    }
-  }, []);
+      return mapped;
+    },
+    enabled: isAuthenticated,
+  });
 
   useEffect(() => {
-    if (isAuthenticated) {
-      loadFeed();
+    if (apiFeed) {
+      setFeedItems(prev => {
+        const mockItems = prev.filter(i => !i.id.startsWith("post-") ? false : true);
+        const existingIds = new Set(apiFeed.map(m => m.id));
+        const mockOnly = mockItems.filter(m => !existingIds.has(m.id));
+        return [...apiFeed, ...mockOnly];
+      });
     }
-  }, [isAuthenticated, loadFeed]);
+  }, [apiFeed]);
 
   // Handle addition of a custom feed post
   const handlePublishFeedPost = async (data: ConceptFormData) => {

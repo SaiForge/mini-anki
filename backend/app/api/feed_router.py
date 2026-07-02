@@ -40,50 +40,51 @@ class CommentCreate(BaseModel):
     parent_comment_id: Optional[uuid.UUID] = None
 
 
-def _serialize_post(post: Post, current_user_id, db: Session) -> dict:
-    """Convert a Post ORM object to a JSON-safe dict with like/bookmark status."""
-    likes_count = len(post.likes)
-    comments_count = len(post.comments)
-    bookmarks_count = len(post.bookmarks)
+from sqlalchemy import desc, func
 
-    is_liked = db.query(PostLike).filter(
-        PostLike.post_id == post.post_id,
-        PostLike.user_id == current_user_id
-    ).first() is not None
-
-    is_bookmarked = db.query(Bookmark).filter(
-        Bookmark.post_id == post.post_id,
-        Bookmark.user_id == current_user_id
-    ).first() is not None
-
-    is_followed = db.query(Follow).filter(
-        Follow.follower_id == current_user_id,
-        Follow.following_id == post.author_id
-    ).first() is not None
-
-    author = post.author
-    return {
-        "post_id": str(post.post_id),
-        "author_id": str(post.author_id),
-        "author_username": author.username if author else None,
-        "author_full_name": author.full_name if author else None,
-        "author_avatar_url": None,
-        "author_streak": author.current_streak if author else 0,
-        "content_type": post.content_type,
-        "title": post.title,
-        "body": post.body,
-        "code_snippet": post.code_snippet,
-        "image_url": post.image_url,
-        "category": post.category,
-        "is_private": post.is_private,
-        "created_at": post.created_at.isoformat() if post.created_at else None,
-        "likes_count": likes_count,
-        "comments_count": comments_count,
-        "bookmarks_count": bookmarks_count,
-        "is_liked": is_liked,
-        "is_bookmarked": is_bookmarked,
-        "is_followed": is_followed,
-    }
+def _serialize_posts_batched(posts: List[Post], current_user_id, db: Session) -> List[dict]:
+    """Convert Post ORM objects to JSON-safe dicts with batched like/bookmark status."""
+    if not posts:
+        return []
+        
+    post_ids = [p.post_id for p in posts]
+    
+    like_counts = dict(db.query(PostLike.post_id, func.count(PostLike.like_id)).filter(PostLike.post_id.in_(post_ids)).group_by(PostLike.post_id).all())
+    comment_counts = dict(db.query(Comment.post_id, func.count(Comment.comment_id)).filter(Comment.post_id.in_(post_ids)).group_by(Comment.post_id).all())
+    bookmark_counts = dict(db.query(Bookmark.post_id, func.count(Bookmark.bookmark_id)).filter(Bookmark.post_id.in_(post_ids)).group_by(Bookmark.post_id).all())
+    
+    liked_post_ids = {row[0] for row in db.query(PostLike.post_id).filter(PostLike.post_id.in_(post_ids), PostLike.user_id == current_user_id).all()}
+    bookmarked_post_ids = {row[0] for row in db.query(Bookmark.post_id).filter(Bookmark.post_id.in_(post_ids), Bookmark.user_id == current_user_id).all()}
+    
+    author_ids = list({p.author_id for p in posts})
+    followed_author_ids = {row[0] for row in db.query(Follow.following_id).filter(Follow.following_id.in_(author_ids), Follow.follower_id == current_user_id).all()}
+    
+    result = []
+    for post in posts:
+        author = post.author
+        result.append({
+            "post_id": str(post.post_id),
+            "author_id": str(post.author_id),
+            "author_username": author.username if author else None,
+            "author_full_name": author.full_name if author else None,
+            "author_avatar_url": None,
+            "author_streak": author.current_streak if author else 0,
+            "content_type": post.content_type,
+            "title": post.title,
+            "body": post.body,
+            "code_snippet": post.code_snippet,
+            "image_url": post.image_url,
+            "category": post.category,
+            "is_private": post.is_private,
+            "created_at": post.created_at.isoformat() if post.created_at else None,
+            "likes_count": like_counts.get(post.post_id, 0),
+            "comments_count": comment_counts.get(post.post_id, 0),
+            "bookmarks_count": bookmark_counts.get(post.post_id, 0),
+            "is_liked": post.post_id in liked_post_ids,
+            "is_bookmarked": post.post_id in bookmarked_post_ids,
+            "is_followed": post.author_id in followed_author_ids,
+        })
+    return result
 
 
 # ─── Posts CRUD ─────────────────────────────────────────────────────────────────
@@ -108,7 +109,7 @@ def create_post(
     db.add(post)
     db.commit()
     db.refresh(post)
-    return _serialize_post(post, current_user.user_id, db)
+    return _serialize_posts_batched([post], current_user.user_id, db)[0]
 
 
 @router.get("/api/posts/{post_id}")
@@ -122,7 +123,7 @@ def get_post(
         raise HTTPException(status_code=404, detail="Post not found")
     if post.is_private and post.author_id != current_user.user_id:
         raise HTTPException(status_code=403, detail="This post is private")
-    return _serialize_post(post, current_user.user_id, db)
+    return _serialize_posts_batched([post], current_user.user_id, db)[0]
 
 
 @router.put("/api/posts/{post_id}")
@@ -142,7 +143,7 @@ def update_post(
         setattr(post, field, value)
     db.commit()
     db.refresh(post)
-    return _serialize_post(post, current_user.user_id, db)
+    return _serialize_posts_batched([post], current_user.user_id, db)[0]
 
 
 @router.delete("/api/posts/{post_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -173,8 +174,15 @@ def get_for_you_feed(
     current_user: User = Depends(get_current_user),
 ):
     """Returns posts from followed users + popular posts, newest first."""
+    cache_key = f"feed:foryou:{current_user.user_id}:{limit}"
+    if cursor: cache_key += f":{cursor.isoformat()}"
+    cached = get_cache_sync(cache_key)
+    if cached: return cached
+
     posts = FeedService.get_for_you_feed(db, current_user.user_id, cursor, limit)
-    result = [_serialize_post(p, current_user.user_id, db) for p in posts]
+    result = _serialize_posts_batched(posts, current_user.user_id, db)
+    
+    set_cache_sync(cache_key, result, expire_seconds=60)
     return result
 
 
@@ -186,8 +194,15 @@ def get_following_feed(
     current_user: User = Depends(get_current_user),
 ):
     """Strictly chronological feed from followed users only."""
+    cache_key = f"feed:following:{current_user.user_id}:{limit}"
+    if cursor: cache_key += f":{cursor.isoformat()}"
+    cached = get_cache_sync(cache_key)
+    if cached: return cached
+
     posts = FeedService.get_following_feed(db, current_user.user_id, cursor, limit)
-    result = [_serialize_post(p, current_user.user_id, db) for p in posts]
+    result = _serialize_posts_batched(posts, current_user.user_id, db)
+    
+    set_cache_sync(cache_key, result, expire_seconds=60)
     return result
 
 
@@ -205,7 +220,7 @@ def get_user_posts(
     if not is_own:
         query = query.filter(Post.is_private == False)
     posts = query.order_by(desc(Post.created_at)).offset(skip).limit(limit).all()
-    return [_serialize_post(p, current_user.user_id, db) for p in posts]
+    return _serialize_posts_batched(posts, current_user.user_id, db)
 
 
 # ─── Likes ──────────────────────────────────────────────────────────────────────
@@ -316,7 +331,7 @@ def get_my_bookmarks(
         .all()
     )
     posts = [bm.post for bm in bms if bm.post]
-    return [_serialize_post(p, current_user.user_id, db) for p in posts]
+    return _serialize_posts_batched(posts, current_user.user_id, db)
 
 
 # ─── Comments ──────────────────────────────────────────────────────────────────
