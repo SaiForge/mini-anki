@@ -27,6 +27,7 @@ class DeckResponse(BaseModel):
     like_count: int = 0
     original_deck_id: UUID | None = None
     has_changes: bool = False
+    due_count: int = 0
 
     class Config:
         from_attributes = True

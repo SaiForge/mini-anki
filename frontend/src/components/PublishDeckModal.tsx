@@ -36,55 +36,43 @@ export function PublishDeckModal({ deck, onClose, onConfirm, isDarkMode = true }
   };
 
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm ${
-      isDarkMode ? "bg-black/60" : "bg-black/20"
-    }`}>
-      <div className={`w-full max-w-md border rounded-xl overflow-hidden shadow-2xl relative ${
-        isDarkMode ? "bg-[#0b0b0b] border-[#1c1c1c] text-white" : "bg-white border-[#ebdcd7] text-[#22223b]"
-      }`}>
-        <div className="flex items-center justify-between p-4 border-b border-inherit">
-          <div className="flex items-center gap-2 text-emerald-500">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm bg-black/60">
+      <div className="w-full max-w-md border border-[#1A1A1A] bg-[#0c0c0c] rounded-xl overflow-hidden shadow-2xl relative text-white">
+        <div className="flex items-center justify-between p-4 border-b border-[#1A1A1A]">
+          <div className="flex items-center gap-2 text-[var(--theme-on-surface)]">
             <Globe className="w-5 h-5" />
-            <h3 className="font-bold tracking-wide uppercase">Publish Deck</h3>
+            <h3 className="font-bold tracking-wide uppercase text-sm">Publish Deck</h3>
           </div>
-          <button onClick={onClose} className={`p-1 rounded-md transition-colors ${
-            isDarkMode ? "hover:bg-white/10" : "hover:bg-black/5"
-          }`}>
+          <button onClick={onClose} className="p-1 rounded text-on-surface-variant hover:bg-[#131313] hover:text-white transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className={`p-4 border-b text-sm flex items-start gap-3 ${
-          isDarkMode ? "bg-amber-950/20 border-[#1c1c1c] text-amber-500/90" : "bg-amber-50 border-[#ebdcd7] text-amber-700"
-        }`}>
+        <div className="p-4 border-b border-[#1A1A1A] text-sm flex items-start gap-3 bg-amber-500/10 text-amber-500/90">
           <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-          <p className="leading-relaxed font-mono">
+          <p className="leading-relaxed font-mono text-[11px]">
             Making this deck public will list it in the Explore feed for anyone to study and fork. Make sure it has proper tags!
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
           <div className="space-y-2">
-            <Label isDarkMode={isDarkMode}>Description</Label>
+            <Label className="text-xs tracking-wider text-on-surface-variant uppercase font-mono">Description</Label>
             <Input
-              isDarkMode={isDarkMode}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="What is this deck about?"
+              className="w-full px-3 py-2.5 border border-[#1A1A1A] rounded-md font-mono text-sm tracking-wide transition-colors bg-[#111111] text-white focus:border-white focus:ring-0"
               required
             />
           </div>
 
           <div className="space-y-2">
-            <Label isDarkMode={isDarkMode}>Category</Label>
+            <Label className="text-xs tracking-wider text-on-surface-variant uppercase font-mono">Category</Label>
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className={`w-full px-3 py-3 border rounded-xs font-mono text-xs uppercase tracking-wider transition-colors appearance-none focus:outline-none focus:ring-1 focus:ring-emerald-500/50 ${
-                isDarkMode 
-                  ? "bg-black border-[#222] text-white" 
-                  : "bg-[#fcf8f6] border-[#ebdcd7] text-[#22223b]"
-              }`}
+              className="w-full px-3 py-2.5 border border-[#1A1A1A] rounded-md font-mono text-sm tracking-wide transition-colors appearance-none focus:outline-none focus:border-white bg-[#111111] text-white"
               required
             >
               <option value="PROGRAMMING">Programming</option>
@@ -98,31 +86,28 @@ export function PublishDeckModal({ deck, onClose, onConfirm, isDarkMode = true }
           </div>
 
           <div className="space-y-2">
-            <Label isDarkMode={isDarkMode}>Tags</Label>
+            <Label className="text-xs tracking-wider text-on-surface-variant uppercase font-mono">Tags</Label>
             <div className="relative">
               <div className="absolute left-3 top-1/2 -translate-y-1/2">
-                <Tag className={`w-4 h-4 ${isDarkMode ? "text-zinc-600" : "text-zinc-400"}`} />
+                <Tag className="w-4 h-4 text-on-surface-variant" />
               </div>
               <Input
-                isDarkMode={isDarkMode}
                 value={tagsString}
                 onChange={(e) => setTagsString(e.target.value)}
                 placeholder="react, typescript, frontend..."
-                className="pl-9"
+                className="pl-9 text-left w-full px-3 py-2.5 border border-[#1A1A1A] rounded-md font-mono text-sm tracking-wide transition-colors bg-[#111111] text-white focus:border-white focus:ring-0"
               />
             </div>
-            <p className={`text-[10px] font-mono tracking-wider ${
-              isDarkMode ? "text-zinc-500" : "text-zinc-400"
-            }`}>Comma separated list of tags</p>
+            <p className="text-[10px] font-mono tracking-wider text-on-surface-variant/60">Comma separated list of tags</p>
           </div>
 
-          <div className="pt-2 flex justify-end gap-3">
-            <Button type="button" variant="ghost" isDarkMode={isDarkMode} onClick={onClose} disabled={isPublishing}>
-              Cancel
+          <div className="pt-4 flex justify-end gap-3">
+            <Button type="button" variant="ghost" onClick={onClose} disabled={isPublishing} className="text-on-surface-variant hover:text-white rounded font-mono text-xs tracking-wider px-5 py-2.5 h-auto">
+              CANCEL
             </Button>
-            <Button type="submit" variant="primary" isDarkMode={isDarkMode} disabled={isPublishing} className="gap-2">
+            <Button type="submit" disabled={isPublishing} className="bg-[var(--theme-primary)] text-[var(--theme-on-primary)] hover:opacity-90 active:scale-95 whitespace-nowrap rounded font-mono text-xs tracking-wider px-5 py-2.5 h-auto border-none flex items-center gap-2">
               {isPublishing && <Loader2 className="w-4 h-4 animate-spin" />}
-              Publish to Explore
+              PUBLISH DECK
             </Button>
           </div>
         </form>

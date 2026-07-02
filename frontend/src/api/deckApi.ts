@@ -18,6 +18,7 @@ export interface ApiDeck {
   like_count?: number;
   original_deck_id?: string;
   has_changes?: boolean;
+  due_count?: number;
 }
 
 export interface ApiCard {
@@ -66,12 +67,25 @@ export function mapApiDeckToStudyDeck(
   overrideMeta?: Partial<DeckLocalMeta>
 ): StudyDeck {
   const stored = loadDeckMeta(apiDeck.deck_id);
+
+  // Dynamic progress calculation based on due_count if provided by backend
+  let calculatedProgress = 0;
+  if (apiDeck.due_count !== undefined && apiDeck.card_count > 0) {
+    // Progress is the percentage of cards that are NOT due
+    calculatedProgress = Math.round(((apiDeck.card_count - apiDeck.due_count) / apiDeck.card_count) * 100);
+  } else if (apiDeck.due_count === 0 || apiDeck.card_count === 0) {
+    calculatedProgress = 100;
+  } else {
+    // Fallback to stored progress if due_count isn't available
+    calculatedProgress = overrideMeta?.progress ?? stored?.progress ?? 0;
+  }
+
   const meta: DeckLocalMeta = {
     category: apiDeck.category ?? overrideMeta?.category ?? stored?.category ?? "GENERAL",
     description: apiDeck.description ?? overrideMeta?.description ?? stored?.description ?? "",
     iconType: overrideMeta?.iconType ?? stored?.iconType ?? "terminal",
     isPrivate: overrideMeta?.isPrivate ?? stored?.isPrivate ?? false,
-    progress: overrideMeta?.progress ?? stored?.progress ?? 0,
+    progress: calculatedProgress,
     tags: overrideMeta?.tags ?? stored?.tags ?? [],
   };
 

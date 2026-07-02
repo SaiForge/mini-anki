@@ -39,6 +39,7 @@ interface StudySessionProps {
   onSaveCardToDeck?: (question: string, answer: string, deckId: string, details?: string) => void;
   onRemoveCardFromDeck?: (question: string, answer: string, deckId: string) => void;
   onSessionComplete?: (deckId: string) => void;
+  initialBrowsing?: boolean;
 }
 
 export default function StudySession({
@@ -51,7 +52,8 @@ export default function StudySession({
   isPublic = false,
   decks,
   onImportDeck,
-  onSessionComplete
+  onSessionComplete,
+  initialBrowsing = false
 }: StudySessionProps) {
   // ── State ─────────────────────────────────────────────────────────────────
   const [apiCards, setApiCards] = useState<Flashcard[]>([]);
@@ -115,7 +117,7 @@ export default function StudySession({
   ];
 
   const [extraCards, setExtraCards] = useState<Flashcard[]>([]);
-  const [isBrowsing, setIsBrowsing] = useState<boolean>(false);
+  const [isBrowsing, setIsBrowsing] = useState<boolean>(initialBrowsing);
   const [browseCards, setBrowseCards] = useState<Flashcard[]>([]);
   const [browseLoading, setBrowseLoading] = useState<boolean>(false);
 

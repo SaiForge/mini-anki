@@ -30,7 +30,7 @@ import { GitPullRequest } from "lucide-react";
 interface DecksViewProps {
   decks: StudyDeck[];
   stats: StudyStats;
-  onStudyDeck: (deckName: string, deckId?: string) => void;
+  onStudyDeck: (deckName: string, deckId?: string, openInBrowseMode?: boolean) => void;
   onAddNewDeck: (deck: StudyDeck) => void;
   onDeleteDeck: (deckId: string) => Promise<void>;
   onAddNewCardClick?: () => void;
@@ -117,71 +117,45 @@ export default function DecksView({
   };
 
   const renderDeckRow = (deck: StudyDeck) => {
-    // Resolve correct icon styles
-    const renderIcon = () => {
-      switch (deck.iconType) {
-        case "terminal":
-          return <Terminal className="w-5 h-5 text-white" />;
-        case "database":
-          return <Database className="w-5 h-5 text-on-surface-variant group-hover:text-white transition-colors" />;
-        case "security":
-          return <ShieldCheck className="w-5 h-5 text-on-surface-variant group-hover:text-white transition-colors" />;
-        case "brain":
-          return <Brain className="w-5 h-5 text-pink-400 group-hover:text-pink-300 transition-colors" />;
-        case "science":
-          return <HelpCircle className="w-5 h-5 text-yellow-400 group-hover:text-yellow-300 transition-colors" />;
-        default:
-          return <BookOpen className="w-5 h-5 text-on-surface-variant group-hover:text-white transition-colors" />;
-      }
-    };
-
-    const isSystemsActive = deck.active || deck.title.toLowerCase().includes("systems");
-
     return (
       <div
         key={deck.id}
-        className={`relative group flex flex-col md:flex-row items-center justify-between p-6 transition-all duration-200 ${isSystemsActive ? "bg-surface-container-lowest/70" : "bg-black hover:bg-neutral-900/35"
-          }`}
+        className="relative overflow-hidden group flex flex-col md:flex-row items-center justify-between px-6 pt-6 pb-8 md:pb-7 bg-[#0c0c0c] hover:bg-[#131313] rounded-lg transition-colors duration-200"
       >
-        {/* Full-width thin progress bar at the top */}
-        <div className="absolute top-0 left-0 right-0 h-[2px] bg-white/5">
-          <div
-            className={`h-full transition-all duration-500 ${isSystemsActive ? "bg-white" : "bg-indigo-400 group-hover:bg-indigo-300"}`}
-            style={{ width: `${deck.progress || 0}%` }}
-          ></div>
+        {/* Padded Progress Bar */}
+        <div className="absolute bottom-3 left-6 right-6 h-[3px] bg-black/10 dark:bg-white/5 rounded-full overflow-hidden z-0">
+          <div 
+            className="absolute top-0 bottom-0 left-0 bg-[var(--theme-primary)] transition-all duration-500 ease-out" 
+            style={{ width: `${deck.progress || 0}%` }} 
+          />
         </div>
-
-        <div className="flex items-center gap-5 flex-1 mb-4 md:mb-0 w-full md:w-auto">
-          {/* Visual Icon card housing */}
-          <div className="w-11 h-11 flex items-center justify-center border border-[#1A1A1A] bg-black rounded-xs shrink-0">
-            {renderIcon()}
+        <div className="flex items-center gap-5 flex-1 mb-4 md:mb-0 w-full md:w-auto z-10">
+          {/* Action square */}
+          <div className="w-11 h-11 flex items-center justify-center bg-black/5 dark:bg-white/5 rounded shrink-0 text-on-surface hover:text-white cursor-pointer transition-colors">
+            <span className="font-mono text-sm font-bold">{'>_'}</span>
           </div>
 
           <div className="space-y-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="font-sans font-bold text-sm text-white group-hover:text-white transition-colors">
-                {deck.title}
-              </h3>
-              {isSystemsActive && (
-                <Badge variant="default" className="text-[9px] px-2 py-0.5">
-                  Active
-                </Badge>
-              )}
-            </div>
+            <h3 
+              onClick={() => onStudyDeck(deck.title, deck.id, true)}
+              className="font-sans font-bold text-base text-white flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+            >
+              {deck.title.replace(/📚\s*/g, '')}
+            </h3>
             <p className="text-[11px] text-on-surface-variant leading-relaxed max-w-xl">
-              {deck.description}
+              {deck.description || deck.category?.toLowerCase()}
             </p>
           </div>
         </div>
 
         {/* Progress metrics and CTA segment */}
-        <div className="flex items-center gap-4 sm:gap-8 justify-between md:justify-end w-full md:w-auto">
+        <div className="flex items-center gap-6 justify-between md:justify-end w-full md:w-auto">
           {/* Card count tag */}
-          <div className="text-right shrink-0">
-            <span className="text-[9px] font-mono text-on-surface-variant/40 uppercase tracking-widest block">
+          <div className="text-right shrink-0 flex flex-col items-center justify-center">
+            <span className="text-[9px] font-mono text-on-surface-variant/50 uppercase tracking-widest block mb-0.5">
               Cards
             </span>
-            <span className="text-xs font-mono font-bold text-white">
+            <span className="text-sm font-mono font-bold text-white">
               {deck.cardCount.toLocaleString()}
             </span>
           </div>
@@ -190,108 +164,109 @@ export default function DecksView({
           {deck.originalDeckId && deck.hasChanges ? (
             <Button
               onClick={() => setSubmittingPRFor(deck.id)}
-              variant="outline"
-              className="border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10 px-3"
+              variant="ghost"
+              className="text-on-surface-variant hover:text-white px-2"
               title="Submit changes to original deck"
             >
               <GitPullRequest className="w-4 h-4 mr-1.5" />
-              Submit PR
+              PRS
             </Button>
           ) : (deck.isPublic || publishStatus[deck.id]) ? (
             <Button
               onClick={() => setViewingPRsFor(deck.id)}
               variant="ghost"
-              className="text-zinc-400 hover:text-white px-3"
+              className="text-on-surface-variant hover:text-white px-2"
               title="View Contributions"
             >
               <GitPullRequest className="w-4 h-4 mr-1.5" />
-              PRs
+              PRS
             </Button>
           ) : null}
 
-          {/* Primary dynamic CTA action button based on specs */}
+          {/* Primary dynamic CTA action button */}
           {deck.cardCount > 0 && deck.progress < 100 ? (
             <Button
               onClick={() => onStudyDeck(deck.title)}
-              variant="primary"
-              className="active:scale-95 whitespace-nowrap"
+              className="bg-[var(--theme-primary)] text-[var(--theme-on-primary)] hover:opacity-90 active:scale-95 whitespace-nowrap rounded font-mono text-xs tracking-wider px-5 py-2.5 h-auto border-none"
             >
-              Study Now
+              STUDY NOW
             </Button>
           ) : (
             <Button
               onClick={() => onStudyDeck(deck.title)}
               variant="outline"
-              className="border-outline-variant hover:border-white text-on-surface hover:bg-neutral-900 whitespace-nowrap"
+              className="border-[#1A1A1A] hover:bg-neutral-900 text-on-surface whitespace-nowrap rounded font-mono text-xs tracking-wider px-5 py-2.5 h-auto"
             >
-              Review
+              REVIEW
             </Button>
           )}
 
-          {/* Menu button — hidden for default deck */}
-          {!deck.title.includes("Today's Review") && (
-            <div className="relative">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setOpenMenuId(openMenuId === deck.id ? null : deck.id);
-                }}
-                className="p-2 text-on-surface-variant/40 hover:text-white transition-colors cursor-pointer rounded-md hover:bg-neutral-800/50"
-              >
-                <MoreVertical className="w-4 h-4" />
-              </button>
-              {openMenuId === deck.id && (
-                <>
-                  <div
-                    className="fixed inset-0 z-10"
-                    onClick={(e) => { e.stopPropagation(); setOpenMenuId(null); }}
-                  />
-                  <div className="absolute right-0 top-full mt-1 w-48 bg-[#0a0a0a] border border-[#1A1A1A] rounded-md shadow-lg overflow-hidden z-20 flex flex-col py-1">
-                    <button
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        setOpenMenuId(null);
-                        const isCurrentlyPublic = publishStatus[deck.id] ?? deck.isPublic;
-                        if (isCurrentlyPublic) {
-                          setPublishingId(deck.id);
-                          try {
-                            await unpublishDeck(deck.id);
-                            setPublishStatus(prev => ({ ...prev, [deck.id]: false }));
-                          } catch (err) {
-                            console.error("Failed to unpublish", err);
-                          } finally {
-                            setPublishingId(null);
+          {/* Menu button */}
+          <div className="w-6 flex justify-end">
+            {!deck.title.includes("Today's Review") ? (
+              <div className="relative">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpenMenuId(openMenuId === deck.id ? null : deck.id);
+                  }}
+                  className="p-1 text-on-surface-variant/40 hover:text-white transition-colors cursor-pointer rounded"
+                >
+                  <MoreVertical className="w-4 h-4" />
+                </button>
+                {openMenuId === deck.id && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={(e) => { e.stopPropagation(); setOpenMenuId(null); }}
+                    />
+                    <div className="absolute right-0 top-full mt-1 w-48 bg-[#0c0c0c] border border-[#1A1A1A] rounded shadow-lg overflow-hidden z-20 flex flex-col py-1">
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          setOpenMenuId(null);
+                          const isCurrentlyPublic = publishStatus[deck.id] ?? deck.isPublic;
+                          if (isCurrentlyPublic) {
+                            setPublishingId(deck.id);
+                            try {
+                              await unpublishDeck(deck.id);
+                              setPublishStatus(prev => ({ ...prev, [deck.id]: false }));
+                            } catch (err) {
+                              console.error("Failed to unpublish", err);
+                            } finally {
+                              setPublishingId(null);
+                            }
+                          } else {
+                            setPublishingDeck(deck);
                           }
-                        } else {
-                          setPublishingDeck(deck);
-                        }
-                      }}
-                      disabled={publishingId === deck.id}
-                      className="px-4 py-2.5 text-left text-[11px] font-mono tracking-wider text-zinc-300 hover:bg-neutral-800 hover:text-white flex items-center gap-3 transition-colors"
-                    >
-                      {publishingId === deck.id
-                        ? <Loader2 className="w-4 h-4 animate-spin" />
-                        : (publishStatus[deck.id] ?? deck.isPublic)
-                          ? <Lock className="w-4 h-4" />
-                          : <Globe className="w-4 h-4" />}
-                      {(publishStatus[deck.id] ?? deck.isPublic) ? "MAKE PRIVATE" : "PUBLISH DECK"}
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenMenuId(null);
-                        setConfirmDeleteDeck(deck);
-                      }}
-                      className="px-4 py-2.5 text-left text-[11px] font-mono tracking-wider text-red-500 hover:bg-neutral-800 flex items-center gap-3 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      DELETE DECK
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+                        }}
+                        disabled={publishingId === deck.id}
+                        className="px-4 py-2.5 text-left text-[11px] font-mono tracking-wider text-on-surface hover:bg-[#131313] flex items-center gap-3 transition-colors"
+                      >
+                        {publishingId === deck.id
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : (publishStatus[deck.id] ?? deck.isPublic)
+                            ? <Lock className="w-4 h-4" />
+                            : <Globe className="w-4 h-4" />}
+                        {(publishStatus[deck.id] ?? deck.isPublic) ? "MAKE PRIVATE" : "PUBLISH DECK"}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenMenuId(null);
+                          setConfirmDeleteDeck(deck);
+                        }}
+                        className="px-4 py-2.5 text-left text-[11px] font-mono tracking-wider text-red-500 hover:bg-[#131313] flex items-center gap-3 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        DELETE DECK
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     );
@@ -341,32 +316,32 @@ export default function DecksView({
       )}
 
       {/* Study Tracks Sections */}
-      <div className="space-y-8">
+      <div className="space-y-4">
         {/* Default Decks Section */}
         {defaultDecks.length > 0 && (
-          <div className="border border-[#1A1A1A] rounded-lg shadow-sm overflow-hidden divide-y divide-[#1A1A1A]">
+          <div className="flex flex-col gap-4">
             {defaultDecks.map(renderDeckRow)}
           </div>
         )}
 
         {/* Custom Decks Section */}
-        <div className="border border-[#1A1A1A] rounded-lg shadow-sm overflow-hidden divide-y divide-[#1A1A1A]">
+        <div className="flex flex-col gap-4">
           {decksLoading ? (
             // Loading skeleton
             [0, 1, 2].map(i => (
-              <div key={i} className="flex items-center justify-between p-6 animate-pulse">
+              <div key={i} className="flex items-center justify-between p-6 bg-[#0c0c0c] rounded-xl animate-pulse">
                 <div className="flex items-center gap-5 flex-1">
-                  <div className="w-11 h-11 rounded-xs bg-neutral-900" />
+                  <div className="w-11 h-11 rounded bg-neutral-900" />
                   <div className="space-y-2 flex-1">
                     <div className="h-3 bg-neutral-800 rounded w-40" />
                     <div className="h-2 bg-neutral-900 rounded w-64" />
                   </div>
                 </div>
-                <div className="h-8 w-20 bg-neutral-800 rounded-xs" />
+                <div className="h-8 w-20 bg-neutral-800 rounded" />
               </div>
             ))
           ) : customDecks.length === 0 ? (
-            <div className="p-12 text-center">
+            <div className="p-12 text-center bg-[#0c0c0c] rounded-xl">
               <p className="text-xs font-mono text-on-surface-variant/40 uppercase tracking-widest">No decks found. Create your first deck above.</p>
             </div>
           ) : customDecks.map(renderDeckRow)}

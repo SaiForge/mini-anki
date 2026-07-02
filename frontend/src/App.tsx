@@ -97,6 +97,7 @@ export default function App() {
   const [activeStudyDeck, setActiveStudyDeck] = useState<string | null>(null);
   const [activeStudyDeckId, setActiveStudyDeckId] = useState<string | null>(null);
   const [isActiveStudyDeckPublic, setIsActiveStudyDeckPublic] = useState<boolean>(false);
+  const [initialBrowsingMode, setInitialBrowsingMode] = useState<boolean>(false);
   const [selectedProfileUsername, setSelectedProfileUsername] = useState<string | null>(null);
   const [showAiAssistant, setShowAiAssistant] = useState<boolean>(false);
   const [quickAddDrawerMode, setQuickAddDrawerMode] = useState<"publish" | "deck-only" | null>(null);
@@ -1076,10 +1077,11 @@ export default function App() {
                   stats={stats}
                   isDarkMode={isDarkMode}
                   decksLoading={decksLoading}
-                  onStudyDeck={(deckName, deckId) => {
+                  onStudyDeck={(deckName, deckId, openInBrowseMode) => {
                     setActiveStudyDeck(deckName);
                     setActiveStudyDeckId(deckId ?? decks.find(d => d.title === deckName)?.id ?? null);
                     setIsActiveStudyDeckPublic(false);
+                    setInitialBrowsingMode(!!openInBrowseMode);
                     setActiveTab("study");
                   }}
                   onRefreshDecks={fetchDecksData}
@@ -1249,10 +1251,12 @@ export default function App() {
                   deckTitle={activeStudyDeck}
                   deckId={activeStudyDeckId}
                   cards={decks.find(d => d.title === activeStudyDeck)?.cards || []}
+                  initialBrowsing={initialBrowsingMode}
                   onClose={() => {
                     setActiveStudyDeck(null);
                     setActiveStudyDeckId(null);
                     setIsActiveStudyDeckPublic(false);
+                    setInitialBrowsingMode(false);
                     goBackTab("explore");
                   }}
                   onCardResult={handleCardResult}
@@ -1337,9 +1341,11 @@ export default function App() {
           deckTitle={activeStudyDeck}
           deckId={activeStudyDeckId}
           cards={decks.find(d => d.title === activeStudyDeck)?.cards || []}
+          initialBrowsing={initialBrowsingMode}
           onClose={() => {
             setActiveStudyDeck(null);
             setActiveStudyDeckId(null);
+            setInitialBrowsingMode(false);
             setIsActiveStudyDeckPublic(false);
             goBackTab("decks");
           }}

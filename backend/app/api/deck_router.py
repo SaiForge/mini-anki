@@ -71,8 +71,16 @@ def get_user_decks(
                 .count()
             )
             deck.card_count = due_cards_count
+            deck.due_count = due_cards_count
         else:
             deck.card_count = len(deck.cards)
+            due_cards_count = (
+                db.query(Card)
+                .join(Schedule)
+                .filter(Card.deck_id == deck.deck_id, Schedule.next_review_date <= today)
+                .count()
+            )
+            deck.due_count = due_cards_count
         
         deck.has_changes = False
         if deck.original_deck_id:

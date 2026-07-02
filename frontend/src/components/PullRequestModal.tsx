@@ -80,26 +80,26 @@ export function PullRequestModal({ deckId, onClose, onApproved }: PullRequestMod
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="border border-[#1A1A1A] rounded-xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[80vh] bg-black">
-        <div className="flex items-center justify-between p-4 border-b border-[#1A1A1A] bg-[#111111]">
-          <div className="flex items-center gap-2">
-            <GitPullRequest className="w-5 h-5 text-indigo-500" />
-            <h2 className="text-lg font-bold tracking-wide text-white">
+      <div className="border border-[#1A1A1A] rounded-xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[80vh] bg-[#0c0c0c]">
+        <div className="flex items-center justify-between p-4 border-b border-[#1A1A1A]">
+          <div className="flex items-center gap-2 text-[var(--theme-on-surface)]">
+            <GitPullRequest className="w-5 h-5" />
+            <h2 className="text-sm font-bold uppercase tracking-wide">
               Pending Contributions
             </h2>
           </div>
-          <button onClick={onClose} className="transition-colors text-zinc-500 hover:text-white">
+          <button onClick={onClose} className="p-1 rounded text-on-surface-variant hover:bg-[#131313] hover:text-white transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <div className="p-4 overflow-y-auto flex-1">
           {loading ? (
-            <div className="flex justify-center py-8 text-zinc-500">
+            <div className="flex justify-center py-8 text-on-surface-variant">
               <Loader2 className="w-6 h-6 animate-spin" />
             </div>
           ) : prs.length === 0 ? (
-            <div className="text-center py-8 font-mono text-sm text-zinc-500">
+            <div className="text-center py-12 font-mono text-[11px] text-on-surface-variant tracking-wider uppercase">
               No pending contributions for this deck.
             </div>
           ) : (
@@ -110,23 +110,23 @@ export function PullRequestModal({ deckId, onClose, onApproved }: PullRequestMod
                 const canApprove = selectedCount > 0;
 
                 return (
-                  <div key={pr.pr_id} className="border border-[#1A1A1A] rounded-lg p-4 bg-zinc-900">
+                  <div key={pr.pr_id} className="border border-[#1A1A1A] rounded-lg p-4 bg-[#111111]">
                     <div className="flex justify-between items-start mb-2">
                       <div>
-                        <span className="text-sm font-semibold text-white">
+                        <span className="text-sm font-bold font-sans text-white">
                           @{pr.author_username || "Unknown"}
                         </span>
-                        <span className="text-xs ml-2 text-zinc-500">
+                        <span className="text-[11px] ml-2 text-on-surface-variant">
                           wants to merge {totalCount} new cards
                         </span>
                       </div>
-                      <span className="text-[10px] font-mono text-zinc-500">
+                      <span className="text-[10px] font-mono text-on-surface-variant/60">
                         {new Date(pr.created_at).toLocaleDateString()}
                       </span>
                     </div>
                     
                     {pr.message && (
-                      <p className="text-sm italic mb-4 border-l-2 pl-2 text-zinc-400 border-zinc-700">
+                      <p className="text-[11px] font-mono italic mb-4 border-l pl-3 text-on-surface-variant border-[#1A1A1A]">
                         "{pr.message}"
                       </p>
                     )}
@@ -137,7 +137,7 @@ export function PullRequestModal({ deckId, onClose, onApproved }: PullRequestMod
                           const isSelected = selectedCardsMap[pr.pr_id]?.includes(card.card_id);
                           return (
                             <label key={card.card_id} className={`flex items-start gap-3 p-3 rounded-md border cursor-pointer transition-colors ${
-                              isSelected ? "border-indigo-500/50 bg-indigo-500/10" : "border-[#1A1A1A] bg-black hover:border-zinc-700" 
+                              isSelected ? "border-[var(--theme-primary)] bg-[var(--theme-primary)]/10" : "border-[#1A1A1A] bg-[#0c0c0c] hover:border-white/20" 
                             }`}>
                               <input 
                                 type="checkbox"
@@ -146,10 +146,10 @@ export function PullRequestModal({ deckId, onClose, onApproved }: PullRequestMod
                                 className="mt-1 flex-shrink-0"
                               />
                               <div className="flex-1 text-sm overflow-hidden">
-                                <div className="font-medium mb-1 text-white truncate">
+                                <div className="font-mono text-[11px] mb-1 text-white truncate">
                                   {card.front_text}
                                 </div>
-                                <div className="text-xs text-zinc-400 truncate">
+                                <div className="text-[11px] font-sans text-on-surface-variant truncate">
                                   {card.back_text}
                                 </div>
                               </div>
@@ -161,7 +161,7 @@ export function PullRequestModal({ deckId, onClose, onApproved }: PullRequestMod
 
                     <div className="flex gap-2 justify-end mt-4 items-center">
                       {!canApprove && (
-                         <span className="text-xs mr-2 text-red-500">
+                         <span className="text-[10px] uppercase tracking-wider font-mono mr-2 text-red-500">
                            Select at least 1 card
                          </span>
                       )}
@@ -170,19 +170,19 @@ export function PullRequestModal({ deckId, onClose, onApproved }: PullRequestMod
                         size="sm"
                         onClick={() => handleReject(pr.pr_id)}
                         disabled={actioningId === pr.pr_id}
-                        className="text-red-400 hover:text-red-300 hover:bg-red-400/10"
+                        className="text-red-500 hover:text-red-400 font-mono text-[11px] tracking-wider"
                       >
                         {actioningId === pr.pr_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4 mr-1" />}
-                        Reject
+                        REJECT
                       </Button>
                       <Button
                         size="sm"
                         onClick={() => handleApprove(pr.pr_id)}
                         disabled={actioningId === pr.pr_id || !canApprove}
-                        className="bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="bg-[var(--theme-primary)] text-[var(--theme-on-primary)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed font-mono text-[11px] tracking-wider border-none"
                       >
                         {actioningId === pr.pr_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4 mr-1" />}
-                        Approve & Merge ({selectedCount})
+                        APPROVE ({selectedCount})
                       </Button>
                     </div>
                   </div>
