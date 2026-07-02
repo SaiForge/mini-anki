@@ -38,8 +38,9 @@ services:
     env_file:
       - .env
     environment:
-      # Uses DATABASE_URL from .env file to connect to Supabase
+      - DATABASE_URL=postgresql://minianki_user:minianki_pass@db:5432/minianki
       - REDIS_URL=redis://redis:6379/0
+      - FRONTEND_BASE_URL=http://localhost:5173
     ports:
       - "8000:8000"
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -52,6 +53,8 @@ services:
     container_name: minianki_frontend
     env_file:
       - .env
+    environment:
+      - VITE_API_URL=http://localhost:8000
     ports:
       - "5173:5173"
     depends_on:

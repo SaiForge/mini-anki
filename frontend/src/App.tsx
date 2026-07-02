@@ -1,10 +1,10 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { 
-  FeedItem, 
-  StudyDeck, 
-  SystemLog, 
-  StudyStats 
+import {
+  FeedItem,
+  StudyDeck,
+  SystemLog,
+  StudyStats
 } from "./types";
 import { getMe, UserResponse } from "./api/authApi";
 import { getDecks, mapApiDeckToStudyDeck, saveDeckMeta, deleteDeck as apiDeleteDeck, DeckLocalMeta, createCard, getDeckCards, createDeck } from "./api/deckApi";
@@ -17,6 +17,7 @@ import FeedView from "./components/FeedView";
 import ExploreView from "./components/ExploreView";
 import DecksView from "./components/DecksView";
 import NotificationsView from "./components/NotificationsView";
+import AnalyticsView from "./components/AnalyticsView";
 import SettingsView from "./components/SettingsView";
 import ProfileView from "./components/ProfileView";
 import StudySession from "./components/StudySession";
@@ -28,17 +29,17 @@ import AIChatPanel from "./components/AIChatPanel";
 import SinglePostView from "./components/SinglePostView";
 
 // Lucide custom icons for mobile/AI chat
-import { 
-  Terminal as TerminalIcon, 
-  Sparkles, 
-  Send, 
-  X, 
-  Plus, 
-  Home, 
-  Compass, 
-  Bell, 
-  Layers, 
-  User, 
+import {
+  Terminal as TerminalIcon,
+  Sparkles,
+  Send,
+  X,
+  Plus,
+  Home,
+  Compass,
+  Bell,
+  Layers,
+  User,
   Settings,
   Tag,
   HelpCircle,
@@ -92,7 +93,7 @@ export default function App() {
 
   const [publicDecksFeed, setPublicDecksFeed] = useState<FeedItem[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [messagesTargetUser, setMessagesTargetUser] = useState<{user_id: string; username: string; full_name: string | null; avatar_url: string | null} | null>(null);
+  const [messagesTargetUser, setMessagesTargetUser] = useState<{ user_id: string; username: string; full_name: string | null; avatar_url: string | null } | null>(null);
   const [activeStudyDeck, setActiveStudyDeck] = useState<string | null>(null);
   const [activeStudyDeckId, setActiveStudyDeckId] = useState<string | null>(null);
   const [isActiveStudyDeckPublic, setIsActiveStudyDeckPublic] = useState<boolean>(false);
@@ -183,7 +184,7 @@ export default function App() {
           content: d.description || "",
           likes: d.like_count,
           likedByUser: d.is_liked,
-          timeLabel: "recent",
+          timeLabel: new Date(d.created_at).toLocaleDateString(),
           authorName: d.owner_full_name || d.owner_username || "Anonymous",
           authorUsername: d.owner_username || "anonymous",
           authorId: d.owner_id,
@@ -195,6 +196,43 @@ export default function App() {
       .catch(console.error);
 
   }, [isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Global WebSocket for Notifications
+  useEffect(() => {
+    if (!currentUser?.user_id) return;
+    const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+    const wsUrl = baseUrl.replace(/^http/, 'ws') + `/api/notifications/ws/${currentUser.user_id}`;
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: ReturnType<typeof setTimeout>;
+
+    const connectWS = () => {
+      ws = new WebSocket(wsUrl);
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          window.dispatchEvent(new CustomEvent('fetch_unread_counts'));
+          window.dispatchEvent(new CustomEvent('notification_received', { detail: msg }));
+        } catch (e) {
+          console.warn("WebSocket parse error", e);
+        }
+      };
+
+      ws.onclose = () => {
+        reconnectTimeout = setTimeout(connectWS, 2000);
+      };
+    };
+
+    connectWS();
+
+    return () => {
+      clearTimeout(reconnectTimeout);
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
+    };
+  }, [currentUser?.user_id]);
 
   // User Profile metadata — derived from real API once loaded
   const userEmail = currentUser?.email ?? "";
@@ -272,8 +310,8 @@ export default function App() {
     }
   }, []);
 
-  const handleToggleLike = useCallback(async (id: string) => {
-    const postItem = feedItems.find(x => x.id === id);
+  const handleToggleLike = useCallback(async (id: string, itemContext?: FeedItem) => {
+    const postItem = feedItems.find(x => x.id === id) || (itemContext?.id === id ? itemContext : undefined);
     if (postItem) {
       setFeedItems(prev => prev.map(item =>
         item.id === id ? { ...item, likedByUser: !item.likedByUser, likes: item.likedByUser ? item.likes - 1 : item.likes + 1 } : item
@@ -305,13 +343,13 @@ export default function App() {
     }
   }, [feedItems, publicDecksFeed]);
 
-  const handleToggleBookmark = useCallback(async (id: string) => {
+  const handleToggleBookmark = useCallback(async (id: string, itemContext?: FeedItem) => {
     // Optimistic update
     setFeedItems(prev => prev.map(item =>
       item.id === id ? { ...item, bookmarkedByUser: !item.bookmarkedByUser } : item
     ));
     try {
-      const item = feedItems.find(x => x.id === id);
+      const item = feedItems.find(x => x.id === id) || (itemContext?.id === id ? itemContext : undefined);
       if (item?.bookmarkedByUser) {
         await removeBookmark(id);
       } else {
@@ -325,30 +363,25 @@ export default function App() {
     }
   }, [feedItems]);
 
-  const handleToggleFollow = useCallback(async (authorUsername: string) => {
-    let authorName = authorUsername;
-    let targetAuthorId: string | undefined = undefined;
-    let isNowFollowed = false;
-    let wasFollowed = false;
+  const handleToggleFollow = useCallback(async (authorUsername: string, itemContext?: FeedItem) => {
+    let targetItem = feedItems.find(item => item.authorUsername === authorUsername) || (itemContext?.authorUsername === authorUsername ? itemContext : undefined);
     
-    setFeedItems(prev => {
-      const targetItem = prev.find(item => item.authorUsername === authorUsername);
-      if (targetItem) {
-        authorName = targetItem.authorName || authorName;
-        targetAuthorId = targetItem.authorId;
-        wasFollowed = !!targetItem.isFollowed;
-        isNowFollowed = !targetItem.isFollowed;
+    if (!targetItem) return;
+
+    let authorName = targetItem.authorName || authorUsername;
+    let targetAuthorId = targetItem.authorId;
+    let wasFollowed = !!targetItem.isFollowed;
+    let isNowFollowed = !wasFollowed;
+
+    setFeedItems(prev => prev.map(item => {
+      if (item.authorUsername === authorUsername) {
+        return {
+          ...item,
+          isFollowed: isNowFollowed,
+        };
       }
-      return prev.map(item => {
-        if (item.authorUsername === authorUsername) {
-          return {
-            ...item,
-            isFollowed: isNowFollowed,
-          };
-        }
-        return item;
-      });
-    });
+      return item;
+    }));
 
     if (targetAuthorId) {
       try {
@@ -372,7 +405,7 @@ export default function App() {
 
     const followAlert: SystemLog = {
       id: `alert-follow-${Date.now()}`,
-      message: !isNowFollowed 
+      message: !isNowFollowed
         ? `Unfollowed ${authorName}. Content removed from your FOLLOWING feed.`
         : `You are now following ${authorName}. New decrypted concept items added to your FOLLOWING feed.`,
       logId: "305-115",
@@ -624,8 +657,8 @@ export default function App() {
     }));
   };
 
-  const handleSaveCardToDeck = useCallback(async (feedItemId: string, deckId: string) => {
-    const item = feedItems.find(x => x.id === feedItemId);
+  const handleSaveCardToDeck = useCallback(async (feedItemId: string, deckId: string, itemContext?: FeedItem) => {
+    const item = feedItems.find(x => x.id === feedItemId) || (itemContext?.id === feedItemId ? itemContext : undefined);
     if (!item) return;
 
     const question = item.title || `Discuss the core concept of ${item.category}`;
@@ -680,8 +713,8 @@ export default function App() {
     }));
   }, [feedItems, decks]);
 
-  const handleRemoveCardFromDeck = useCallback((feedItemId: string, deckId: string) => {
-    const item = feedItems.find(x => x.id === feedItemId);
+  const handleRemoveCardFromDeck = useCallback((feedItemId: string, deckId: string, itemContext?: FeedItem) => {
+    const item = feedItems.find(x => x.id === feedItemId) || (itemContext?.id === feedItemId ? itemContext : undefined);
     if (!item) return;
 
     setDecks(prev => prev.map(deck => {
@@ -711,8 +744,8 @@ export default function App() {
     setLogs(prev => [alertUnsave, ...prev]);
   }, [feedItems, decks]);
 
-  const handleSaveToNewDeck = useCallback((feedItemId: string, newDeckTitle: string) => {
-    const item = feedItems.find(x => x.id === feedItemId);
+  const handleSaveToNewDeck = useCallback((feedItemId: string, newDeckTitle: string, itemContext?: FeedItem) => {
+    const item = feedItems.find(x => x.id === feedItemId) || (itemContext?.id === feedItemId ? itemContext : undefined);
     if (!item) return;
 
     // Construct the flashcard
@@ -895,25 +928,25 @@ export default function App() {
 
   if (!isAuthenticated) {
     return (
-      <AuthView 
+      <AuthView
         onLoginSuccess={(token) => {
           localStorage.setItem("access_token", token);
           setIsAuthenticated(true);
-        }} 
+        }}
       />
     );
   }
 
   return (
     <div className="flex min-h-screen w-full max-w-full overflow-x-hidden bg-black text-[#e5e2e1] font-sans selection:bg-white selection:text-black">
-      
+
       {/* Sidebar Navigation (Desktop Only) */}
-      <Sidebar 
-        activeTab={activeTab} 
+      <Sidebar
+        activeTab={activeTab}
         setActiveTab={(tab) => {
           handleRootTabClick(tab);
           setSearchQuery("");
-        }} 
+        }}
         onStudyNowClick={() => {
           // Use first non-default deck or default deck
           const firstDeck = decks.find(d => !d.title.includes("Today's Review")) || decks[0];
@@ -922,14 +955,15 @@ export default function App() {
             setActiveStudyDeckId(firstDeck.id);
             setIsActiveStudyDeckPublic(false);
           }
-        }} 
+        }}
       />
 
       {/* Main Core View Area */}
       <div className="flex-1 min-w-0 lg:ml-64 flex flex-col min-h-screen relative">
-        
+
         {/* Responsive Header Component */}
-        <Header 
+        {["feed", "explore", "decks"].includes(activeTab) && (
+          <Header
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           activeTab={activeTab}
@@ -951,11 +985,12 @@ export default function App() {
           feedSubTab={feedSubTab}
           setFeedSubTab={setFeedSubTab}
         />
+        )}
 
         {/* Current Content Canvas */}
         <main className="flex-1">
-          <AnimatePresence 
-            mode="wait" 
+          <AnimatePresence
+            mode="wait"
             onExitComplete={() => {
               // Restore scroll position for the incoming tab after exit animation completes
               window.scrollTo({
@@ -970,255 +1005,265 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2 }}
             >
-          {activeTab === "feed" && (
-            <FeedView 
-              items={feedSubTab === "ONLY_FOR_YOU" ? feedItems : publicDecksFeed}
-              onToggleLike={handleToggleLike}
-              onToggleBookmark={handleToggleBookmark}
-              onAddNewClick={() => setQuickAddDrawerMode("publish")}
-              searchQuery={searchQuery}
-              decks={decks}
-              onSaveCardToDeck={handleSaveCardToDeck}
-              onSaveToNewDeck={handleSaveToNewDeck}
-              onRemoveCardFromDeck={handleRemoveCardFromDeck}
-              onToggleFollow={handleToggleFollow}
-              onViewProfile={(username) => {
-                if (currentUser && (username === currentUser.username || username === `@${currentUser.username}`)) {
-                  setActiveTab("profile");
-                } else {
-                  setSelectedProfileUsername(username); 
-                  setActiveTab("user-profile"); 
-                }
-              }}
-              onSearchChange={setSearchQuery}
-              onStudyDeck={(deckName, deckId) => {
-                setActiveStudyDeck(deckName);
-                setActiveStudyDeckId(deckId ?? decks.find(d => d.title === deckName)?.id ?? null);
-                setIsActiveStudyDeckPublic(true);
-                setActiveTab("study");
-              }}
-              feedSubTab={feedSubTab}
-              setFeedSubTab={setFeedSubTab}
-              isDarkMode={isDarkMode}
-              currentUserId={currentUser?.user_id}
-              currentUsername={currentUser?.username || undefined}
-              onDeletePost={handleDeletePost}
-            />
-          )}
+              {activeTab === "feed" && (
+                <FeedView
+                  items={feedSubTab === "ONLY_FOR_YOU" ? feedItems : publicDecksFeed}
+                  onToggleLike={handleToggleLike}
+                  onToggleBookmark={handleToggleBookmark}
+                  onAddNewClick={() => setQuickAddDrawerMode("publish")}
+                  searchQuery={searchQuery}
+                  decks={decks}
+                  onSaveCardToDeck={handleSaveCardToDeck}
+                  onSaveToNewDeck={handleSaveToNewDeck}
+                  onRemoveCardFromDeck={handleRemoveCardFromDeck}
+                  onToggleFollow={handleToggleFollow}
+                  onViewProfile={(username) => {
+                    if (currentUser && (username === currentUser.username || username === `@${currentUser.username}`)) {
+                      setActiveTab("profile");
+                    } else {
+                      setSelectedProfileUsername(username);
+                      setActiveTab("user-profile");
+                    }
+                  }}
+                  onSearchChange={setSearchQuery}
+                  onStudyDeck={(deckName, deckId) => {
+                    setActiveStudyDeck(deckName);
+                    setActiveStudyDeckId(deckId ?? decks.find(d => d.title === deckName)?.id ?? null);
+                    setIsActiveStudyDeckPublic(true);
+                    setActiveTab("study");
+                  }}
+                  feedSubTab={feedSubTab}
+                  setFeedSubTab={setFeedSubTab}
+                  isDarkMode={isDarkMode}
+                  currentUserId={currentUser?.user_id}
+                  currentUsername={currentUser?.username || undefined}
+                  onDeletePost={handleDeletePost}
+                />
+              )}
 
-          {activeTab === "explore" && (
-            <ExploreView 
-              onStudyDeck={(deckName, deckId) => {
-                setActiveStudyDeck(deckName);
-                setActiveStudyDeckId(deckId ?? decks.find(d => d.title === deckName)?.id ?? null);
-                setIsActiveStudyDeckPublic(true);
-                setActiveTab("study");
-              }}
-              searchQuery={searchQuery}
-              decks={decks}
-              feedItems={feedItems}
-              onSaveCardToDeck={handleSaveExploreCardToDeck}
-              onSaveToNewDeck={handleSaveExploreToNewDeck}
-              onRemoveCardFromDeck={handleRemoveExploreCardFromDeck}
-              onToggleFollow={handleToggleFollow}
-              onViewProfile={(username) => {
-                if (currentUser && (username === currentUser.username || username === `@${currentUser.username}`)) {
-                  setActiveTab("profile");
-                } else {
-                  setSelectedProfileUsername(username); 
-                  setActiveTab("user-profile"); 
-                }
-              }}
-              isDarkMode={isDarkMode}
-              currentUserId={currentUser?.user_id}
-              currentUsername={currentUser?.username || undefined}
-            />
-          )}
+              {activeTab === "explore" && (
+                <ExploreView
+                  onStudyDeck={(deckName, deckId) => {
+                    setActiveStudyDeck(deckName);
+                    setActiveStudyDeckId(deckId ?? decks.find(d => d.title === deckName)?.id ?? null);
+                    setIsActiveStudyDeckPublic(true);
+                    setActiveTab("study");
+                  }}
+                  searchQuery={searchQuery}
+                  decks={decks}
+                  feedItems={feedItems}
+                  onSaveCardToDeck={handleSaveExploreCardToDeck}
+                  onSaveToNewDeck={handleSaveExploreToNewDeck}
+                  onRemoveCardFromDeck={handleRemoveExploreCardFromDeck}
+                  onToggleFollow={handleToggleFollow}
+                  onViewProfile={(username) => {
+                    if (currentUser && (username === currentUser.username || username === `@${currentUser.username}`)) {
+                      setActiveTab("profile");
+                    } else {
+                      setSelectedProfileUsername(username);
+                      setActiveTab("user-profile");
+                    }
+                  }}
+                  isDarkMode={isDarkMode}
+                  currentUserId={currentUser?.user_id}
+                  currentUsername={currentUser?.username || undefined}
+                />
+              )}
 
-          {activeTab === "decks" && (
-            <DecksView 
-              decks={decks}
-              stats={stats}
-              isDarkMode={isDarkMode}
-              decksLoading={decksLoading}
-              onStudyDeck={(deckName, deckId) => {
-                setActiveStudyDeck(deckName);
-                setActiveStudyDeckId(deckId ?? decks.find(d => d.title === deckName)?.id ?? null);
-                setIsActiveStudyDeckPublic(false);
-                setActiveTab("study");
-              }}
-              onRefreshDecks={fetchDecksData}
-              onAddNewCardClick={() => setQuickAddDrawerMode("deck-only")}
-              onAddNewDeck={(newDeck) => {
-                setDecks(prev => [...prev, newDeck]);
-                setStats(curr => ({
-                  ...curr,
-                  studyTime: +(curr.studyTime + 0.5).toFixed(1)
-                }));
-              }}
-              onDeleteDeck={async (deckId) => {
-                try {
-                  await apiDeleteDeck(deckId);
-                  setDecks(prev => prev.filter(d => d.id !== deckId));
-                  const alertDel: SystemLog = {
-                    id: `alert-del-${Date.now()}`,
-                    message: "Deck deleted and removed from your repository.",
-                    logId: "701-002",
-                    type: "SYSTEM_ALERT",
-                    timeLabel: "JUST NOW",
-                    read: false,
-                  };
-                  setLogs(prev => [alertDel, ...prev]);
-                } catch {
-                  // ignore, deck might be default
-                }
-              }}
-              searchQuery={searchQuery}
-            />
-          )}
+              {activeTab === "decks" && (
+                <DecksView
+                  decks={decks}
+                  stats={stats}
+                  isDarkMode={isDarkMode}
+                  decksLoading={decksLoading}
+                  onStudyDeck={(deckName, deckId) => {
+                    setActiveStudyDeck(deckName);
+                    setActiveStudyDeckId(deckId ?? decks.find(d => d.title === deckName)?.id ?? null);
+                    setIsActiveStudyDeckPublic(false);
+                    setActiveTab("study");
+                  }}
+                  onRefreshDecks={fetchDecksData}
+                  onAddNewCardClick={() => setQuickAddDrawerMode("deck-only")}
+                  onAddNewDeck={(newDeck) => {
+                    setDecks(prev => [...prev, newDeck]);
+                    setStats(curr => ({
+                      ...curr,
+                      studyTime: +(curr.studyTime + 0.5).toFixed(1)
+                    }));
+                  }}
+                  onDeleteDeck={async (deckId) => {
+                    try {
+                      await apiDeleteDeck(deckId);
+                      setDecks(prev => prev.filter(d => d.id !== deckId));
+                      const alertDel: SystemLog = {
+                        id: `alert-del-${Date.now()}`,
+                        message: "Deck deleted and removed from your repository.",
+                        logId: "701-002",
+                        type: "SYSTEM_ALERT",
+                        timeLabel: "JUST NOW",
+                        read: false,
+                      };
+                      setLogs(prev => [alertDel, ...prev]);
+                    } catch {
+                      // ignore, deck might be default
+                    }
+                  }}
+                  searchQuery={searchQuery}
+                />
+              )}
 
-          {activeTab === "notifications" && (
-            <NotificationsView 
-              onOpenUserProfile={(username) => {
-                setSelectedProfileUsername(username);
-                setActiveTab("user-profile");
-              }}
-              onNavigateToDecks={() => setActiveTab("decks")}
-              onOpenPost={(postId, openComments) => {
-                setActivePostId(postId);
-                setActivePostOpenComments(openComments);
-                setActiveTab("post");
-              }}
-              onOpenDeck={(deckId) => {
-                const d = decks.find(dk => dk.id === deckId);
-                if (d) {
-                  setActiveStudyDeck(d.title);
-                  setActiveStudyDeckId(d.id);
-                  setIsActiveStudyDeckPublic(false);
-                  setActiveTab("study");
-                } else {
-                  setActiveStudyDeck("Community Deck");
-                  setActiveStudyDeckId(deckId);
-                  setIsActiveStudyDeckPublic(true);
-                  setActiveTab("study");
-                }
-              }}
-            />
-          )}
+              {activeTab === "notifications" && (
+                <NotificationsView
+                  onOpenUserProfile={(username) => {
+                    setSelectedProfileUsername(username);
+                    setActiveTab("user-profile");
+                  }}
+                  onNavigateToDecks={() => setActiveTab("decks")}
+                  onOpenPost={(postId, openComments) => {
+                    setActivePostId(postId);
+                    setActivePostOpenComments(openComments);
+                    setActiveTab("post");
+                  }}
+                  onOpenDeck={(deckId) => {
+                    const d = decks.find(dk => dk.id === deckId);
+                    if (d) {
+                      setActiveStudyDeck(d.title);
+                      setActiveStudyDeckId(d.id);
+                      setIsActiveStudyDeckPublic(false);
+                      setActiveTab("study");
+                    } else {
+                      setActiveStudyDeck("Community Deck");
+                      setActiveStudyDeckId(deckId);
+                      setIsActiveStudyDeckPublic(true);
+                      setActiveTab("study");
+                    }
+                  }}
+                />
+              )}
 
-          {activeTab === "messages" && (
-            <MessagesView
-              currentUserId={currentUser?.user_id || ""}
-              searchQuery={searchQuery}
-              isDarkMode={isDarkMode}
-              targetUser={messagesTargetUser}
-              onClearTargetUser={() => setMessagesTargetUser(null)}
-              onOpenUserProfile={(username) => {
-                setSelectedProfileUsername(username);
-                setActiveTab("user-profile");
-              }}
-            />
-          )}
+              {activeTab === "analytics" && (
+                <AnalyticsView isDarkMode={isDarkMode} />
+              )}
 
-          {activeTab === "settings" && (
-            <SettingsView 
-              userEmail={userEmail} 
-              isDarkMode={isDarkMode}
-              onToggleDarkMode={() => setIsDarkMode(prev => !prev)}
-              onLogout={handleLogout}
-            />
-          )}
+              {activeTab === "messages" && (
+                <MessagesView
+                  currentUserId={currentUser?.user_id || ""}
+                  searchQuery={searchQuery}
+                  isDarkMode={isDarkMode}
+                  targetUser={messagesTargetUser}
+                  onClearTargetUser={() => setMessagesTargetUser(null)}
+                  onOpenUserProfile={(username) => {
+                    setSelectedProfileUsername(username);
+                    setActiveTab("user-profile");
+                  }}
+                  onOpenPost={(postId) => {
+                    setActivePostId(postId);
+                    setActivePostOpenComments(false);
+                    setActiveTab("post");
+                  }}
+                />
+              )}
 
-          {activeTab === "profile" && (
-            <ProfileView 
-              userEmail={currentUser?.email || "anonymous@node"} 
-              currentUser={currentUser}
-              onProfileUpdate={setCurrentUser}
-              stats={stats}
-              onResetStats={handleResetStats}
-              isDarkMode={isDarkMode}
-              feedItems={feedItems}
-              userDecks={decks}
-              onStudyDeck={(deckName, deckId) => {
-                setActiveStudyDeck(deckName);
-                setActiveStudyDeckId(deckId ?? decks.find(d => d.title === deckName)?.id ?? null);
-                setIsActiveStudyDeckPublic(false);
-                setActiveTab("study");
-              }}
-              onDeletePost={handleDeletePost}
-              currentUserId={currentUser?.user_id}
-              currentUsername={currentUser?.username || undefined}
-            />
-          )}
+              {activeTab === "settings" && (
+                <SettingsView
+                  userEmail={userEmail}
+                  isDarkMode={isDarkMode}
+                  onToggleDarkMode={() => setIsDarkMode(prev => !prev)}
+                  onLogout={handleLogout}
+                />
+              )}
 
-          {activeTab === "post" && activePostId && (
-            <SinglePostView
-              postId={activePostId}
-              autoOpenComments={activePostOpenComments}
-              onClose={() => goBackTab("feed")}
-              currentUserId={currentUser?.user_id || undefined}
-              currentUsername={currentUser?.username || undefined}
-              isDarkMode={isDarkMode}
-              onToggleLike={handleToggleLike}
-              onToggleBookmark={handleToggleBookmark}
-              decks={decks}
-              onSaveCardToDeck={handleSaveCardToDeck as any}
-              onSaveToNewDeck={handleSaveToNewDeck}
-              onRemoveCardFromDeck={handleRemoveCardFromDeck}
-              onDeletePost={handleDeletePost}
-              onOpenUserProfile={(username) => {
-                setSelectedProfileUsername(username);
-                setActiveTab("user-profile");
-              }}
-            />
-          )}
+              {activeTab === "profile" && (
+                <ProfileView
+                  userEmail={currentUser?.email || "anonymous@node"}
+                  currentUser={currentUser}
+                  onProfileUpdate={setCurrentUser}
+                  stats={stats}
+                  onResetStats={handleResetStats}
+                  isDarkMode={isDarkMode}
+                  feedItems={feedItems}
+                  userDecks={decks}
+                  onStudyDeck={(deckName, deckId) => {
+                    setActiveStudyDeck(deckName);
+                    setActiveStudyDeckId(deckId ?? decks.find(d => d.title === deckName)?.id ?? null);
+                    setIsActiveStudyDeckPublic(false);
+                    setActiveTab("study");
+                  }}
+                  onDeletePost={handleDeletePost}
+                  currentUserId={currentUser?.user_id}
+                  currentUsername={currentUser?.username || undefined}
+                />
+              )}
 
-          {activeTab === "user-profile" && selectedProfileUsername && (
-            <UserProfileView 
-              username={selectedProfileUsername}
-              onClose={() => {
-                setSelectedProfileUsername(null);
-                goBackTab("feed");
-              }}
-              feedItems={feedItems}
-              userDecks={decks}
-              onToggleFollow={handleToggleFollow}
-              onStudyDeck={(deckName, deckId) => {
-                setActiveStudyDeck(deckName);
-                setActiveStudyDeckId(deckId ?? decks.find(d => d.title === deckName)?.id ?? null);
-                setIsActiveStudyDeckPublic(true);
-                setActiveTab("study");
-              }}
-              userEmail={userEmail}
-              currentUserId={currentUser?.user_id}
-              currentUsername={currentUser?.username || undefined}
-              onMessageClick={(user) => {
-                setMessagesTargetUser(user);
-                setActiveTab("messages");
-              }}
-            />
-          )}
+              {activeTab === "post" && activePostId && (
+                <SinglePostView
+                  postId={activePostId}
+                  autoOpenComments={activePostOpenComments}
+                  onClose={() => goBackTab("feed")}
+                  currentUserId={currentUser?.user_id || undefined}
+                  currentUsername={currentUser?.username || undefined}
+                  isDarkMode={isDarkMode}
+                  onToggleLike={handleToggleLike}
+                  onToggleBookmark={handleToggleBookmark}
+                  onToggleFollow={handleToggleFollow}
+                  decks={decks}
+                  onSaveCardToDeck={handleSaveCardToDeck as any}
+                  onSaveToNewDeck={handleSaveToNewDeck as any}
+                  onRemoveCardFromDeck={handleRemoveCardFromDeck as any}
+                  onDeletePost={handleDeletePost}
+                  onOpenUserProfile={(username) => {
+                    setSelectedProfileUsername(username);
+                    setActiveTab("user-profile");
+                  }}
+                />
+              )}
 
-          {activeTab === "study" && activeStudyDeck !== null && isActiveStudyDeckPublic && (
-            <StudySession 
-              deckTitle={activeStudyDeck}
-              deckId={activeStudyDeckId}
-              cards={decks.find(d => d.title === activeStudyDeck)?.cards || []}
-              onClose={() => {
-                setActiveStudyDeck(null);
-                setActiveStudyDeckId(null);
-                setIsActiveStudyDeckPublic(false);
-                goBackTab("explore");
-              }}
-              onCardResult={handleCardResult}
-              isDarkMode={isDarkMode}
-              isPublic={isActiveStudyDeckPublic}
-              decks={decks}
-              onImportDeck={handleImportSharedDeck}
-              onSaveCardToDeck={handleSaveCardToDeck}
-              onRemoveCardFromDeck={handleRemoveCardFromDeck}
-            />
-          )}
+              {activeTab === "user-profile" && selectedProfileUsername && (
+                <UserProfileView
+                  username={selectedProfileUsername}
+                  onClose={() => {
+                    setSelectedProfileUsername(null);
+                    goBackTab("feed");
+                  }}
+                  feedItems={feedItems}
+                  userDecks={decks}
+                  onToggleFollow={handleToggleFollow}
+                  onStudyDeck={(deckName, deckId) => {
+                    setActiveStudyDeck(deckName);
+                    setActiveStudyDeckId(deckId ?? decks.find(d => d.title === deckName)?.id ?? null);
+                    setIsActiveStudyDeckPublic(true);
+                    setActiveTab("study");
+                  }}
+                  userEmail={userEmail}
+                  currentUserId={currentUser?.user_id}
+                  currentUsername={currentUser?.username || undefined}
+                  onMessageClick={(user) => {
+                    setMessagesTargetUser(user);
+                    setActiveTab("messages");
+                  }}
+                />
+              )}
+
+              {activeTab === "study" && activeStudyDeck !== null && isActiveStudyDeckPublic && (
+                <StudySession
+                  deckTitle={activeStudyDeck}
+                  deckId={activeStudyDeckId}
+                  cards={decks.find(d => d.title === activeStudyDeck)?.cards || []}
+                  onClose={() => {
+                    setActiveStudyDeck(null);
+                    setActiveStudyDeckId(null);
+                    setIsActiveStudyDeckPublic(false);
+                    goBackTab("explore");
+                  }}
+                  onCardResult={handleCardResult}
+                  isDarkMode={isDarkMode}
+                  isPublic={isActiveStudyDeckPublic}
+                  decks={decks}
+                  onImportDeck={handleImportSharedDeck}
+                  onSaveCardToDeck={handleSaveCardToDeck}
+                  onRemoveCardFromDeck={handleRemoveCardFromDeck}
+                />
+              )}
             </motion.div>
           </AnimatePresence>
         </main>
@@ -1242,9 +1287,8 @@ export default function App() {
                   handleRootTabClick(btn.id);
                   setSearchQuery("");
                 }}
-                className={`flex flex-col items-center justify-center p-2 text-center flex-1 cursor-pointer transition-all ${
-                  isTabActive ? "text-white font-bold scale-102" : "text-on-surface-variant/70 hover:text-white"
-                }`}
+                className={`flex flex-col items-center justify-center p-2 text-center flex-1 cursor-pointer transition-all ${isTabActive ? "text-white font-bold scale-102" : "text-on-surface-variant/70 hover:text-white"
+                  }`}
               >
                 <Icon className="w-5 h-5" />
                 <span className="text-[10px] font-sans mt-1 font-medium tracking-wide">{btn.label}</span>
@@ -1278,10 +1322,10 @@ export default function App() {
 
       {/* Slide-In Concept Card Publisher Wizard */}
       {quickAddDrawerMode !== null && (
-        <ConceptPublisher 
-          onClose={() => setQuickAddDrawerMode(null)} 
-          onPublish={handlePublishFeedPost} 
-          isDarkMode={isDarkMode} 
+        <ConceptPublisher
+          onClose={() => setQuickAddDrawerMode(null)}
+          onPublish={handlePublishFeedPost}
+          isDarkMode={isDarkMode}
           userDecks={decks}
           mode={quickAddDrawerMode}
         />
@@ -1289,7 +1333,7 @@ export default function App() {
 
       {/* Interactive flashcard study mode active session overlay */}
       {activeStudyDeck !== null && !isActiveStudyDeckPublic && (
-        <StudySession 
+        <StudySession
           deckTitle={activeStudyDeck}
           deckId={activeStudyDeckId}
           cards={decks.find(d => d.title === activeStudyDeck)?.cards || []}
@@ -1306,6 +1350,23 @@ export default function App() {
           onImportDeck={handleImportSharedDeck}
           onSaveCardToDeck={handleSaveCardToDeck}
           onRemoveCardFromDeck={handleRemoveCardFromDeck}
+          onSessionComplete={(id) => {
+            setDecks(prev => prev.map(d => {
+              if (d.id === id) {
+                const updated = { ...d, progress: 100 };
+                saveDeckMeta(id, {
+                  category: updated.category,
+                  description: updated.description,
+                  iconType: updated.iconType,
+                  isPrivate: updated.isPrivate,
+                  progress: 100,
+                  tags: updated.tags
+                });
+                return updated;
+              }
+              return d;
+            }));
+          }}
         />
       )}
 

@@ -73,7 +73,7 @@ export default function FeedView({
 
   const filteredItems = items.filter((item) => {
     const matchesTab = !item.isPrivate;
-    const matchesSearch = 
+    const matchesSearch =
       item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -92,9 +92,9 @@ export default function FeedView({
   const renderTags = (item: FeedItem, centered = false) => {
     if (!item.tags || item.tags.length === 0) return null;
     return (
-      <div 
+      <div
         className={`flex flex-wrap gap-x-2 gap-y-1 pt-2.5 ${centered ? "justify-center" : "justify-start"}`}
-        onClick={(e) => e.stopPropagation()} 
+        onClick={(e) => e.stopPropagation()}
       >
         {item.tags.map(tag => (
           <button

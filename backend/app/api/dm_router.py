@@ -78,10 +78,10 @@ def get_dm_unread_count(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    count = db.query(DirectMessage).filter(
+    count = db.query(DirectMessage.sender_id).filter(
         DirectMessage.recipient_id == current_user.user_id,
         DirectMessage.is_read == False,
-    ).count()
+    ).distinct().count()
     return {"unread_count": count}
 
 

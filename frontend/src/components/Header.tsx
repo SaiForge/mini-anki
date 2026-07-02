@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, Plus, MessageSquare, Sun, Moon, X } from "lucide-react";
+import { Search, Plus, MessageSquare, Sun, Moon, X, Bot, RefreshCw } from "lucide-react";
 import { Button } from "./ui/Button";
 
 interface HeaderProps {
@@ -13,6 +13,7 @@ interface HeaderProps {
   onToggleDarkMode: () => void;
   feedSubTab?: "ONLY_FOR_YOU" | "FOLLOWING";
   setFeedSubTab?: (tab: "ONLY_FOR_YOU" | "FOLLOWING") => void;
+  onRefresh?: () => void;
 }
 
 export default function Header({
@@ -25,9 +26,11 @@ export default function Header({
   isDarkMode,
   onToggleDarkMode,
   feedSubTab,
-  setFeedSubTab
+  setFeedSubTab,
+  onRefresh
 }: HeaderProps) {
   const [isVisible, setIsVisible] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     let lastY = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop;
@@ -98,9 +101,9 @@ export default function Header({
               DECKS
             </button>
           </div>
-        ) : activeTab === "profile" || activeTab === "notifications" || activeTab === "user-profile" || activeTab === "study" ? null : (
+        ) : activeTab === "profile" || activeTab === "notifications" || activeTab === "analytics" || activeTab === "user-profile" || activeTab === "study" || activeTab === "messages" ? null : (
           /* Integrated Search Bar with keyboard indicator */
-          <div className={`flex items-center rounded-full px-4 py-2.5 w-full md:w-64 lg:w-96 transition-all duration-300 transform ${isVisible
+          <div className={`flex items-center rounded-full px-4 py-2.5 w-full md:w-56 lg:w-72 transition-all duration-300 transform ${isVisible
               ? "opacity-100 translate-y-0 scale-100"
               : "opacity-0 -translate-y-12 scale-90 pointer-events-none"
             } ${isDarkMode
@@ -139,6 +142,28 @@ export default function Header({
               </span>
             )}
           </div>
+        )}
+      </div>
+
+      {/* Extreme Right Actions (Refresh button) */}
+      <div className={`flex items-center gap-4 pointer-events-auto transition-all duration-300 transform ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-12 pointer-events-none"}`}>
+        {activeTab === "explore" && (
+          <Button
+            onClick={() => {
+              setIsRefreshing(true);
+              if (onRefresh) onRefresh();
+              else window.dispatchEvent(new CustomEvent("refreshExplore"));
+              setTimeout(() => setIsRefreshing(false), 1000);
+            }}
+            variant="ghost"
+            size="icon"
+            className={`rounded-full p-2 h-auto hover:bg-transparent border-none ${
+              isDarkMode ? "text-zinc-400 hover:text-white" : "text-[#4a4e69] hover:text-[#22223b]"
+            }`}
+            title="Refresh Explorer"
+          >
+            <RefreshCw className={`w-5 h-5 ${isRefreshing ? "animate-spin" : ""}`} />
+          </Button>
         )}
       </div>
 
@@ -182,7 +207,7 @@ export default function Header({
               : "text-[#4a4e69] hover:text-[#22223b] hover:bg-[#22223b]/10"
             }`}
         >
-          <MessageSquare className="w-5 h-5" />
+          <Bot className="w-5 h-5" />
         </Button>
       </div>
       )}

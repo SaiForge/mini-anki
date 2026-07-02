@@ -19,6 +19,7 @@ interface SinglePostViewProps {
   onRemoveCardFromDeck?: (id: string, deckId: string) => void;
   onDeletePost?: (id: string) => void;
   onOpenUserProfile?: (username: string) => void;
+  onToggleFollow?: (username: string, itemContext?: FeedItem) => void;
 }
 
 export default function SinglePostView({
@@ -35,11 +36,21 @@ export default function SinglePostView({
   onSaveToNewDeck,
   onRemoveCardFromDeck,
   onDeletePost,
-  onOpenUserProfile
+  onOpenUserProfile,
+  onToggleFollow
 }: SinglePostViewProps) {
   const [post, setPost] = useState<FeedItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentStep, setCurrentStep] = useState(0);
+
+  const getCardMaxSteps = (item: FeedItem): number => {
+    if (item.category === "JOKES") return 1;
+    if (item.category === "RIDDLES") return 1;
+    if (item.codeSnippet && item.title && item.content) return 2;
+    if (item.title && item.content) return 1;
+    return 0;
+  };
 
   useEffect(() => {
     let active = true;
@@ -61,6 +72,7 @@ export default function SinglePostView({
           isPrivate: p.is_private,
           authorName: p.author_full_name || p.author_username || "Unknown",
           authorUsername: p.author_username ? `@${p.author_username}` : "@unknown",
+          authorId: p.author_id,
           authorAvatar: p.author_username ? p.author_username.substring(0, 1).toUpperCase() : "U",
           commentsCount: p.comments_count,
           isFollowed: p.is_followed,
@@ -105,11 +117,35 @@ export default function SinglePostView({
             isDarkMode={isDarkMode}
             currentUserId={currentUserId}
             currentUsername={currentUsername}
-            onToggleLike={onToggleLike}
-            onToggleBookmark={onToggleBookmark}
+            isSingle={getCardMaxSteps(post) === 0}
+            currentStep={currentStep}
+            maxSteps={getCardMaxSteps(post)}
+            onToggleReveal={() => {
+              const max = getCardMaxSteps(post);
+              setCurrentStep(prev => (prev >= max ? 0 : prev + 1));
+            }}
+            onToggleLike={(id) => {
+              setPost(prev => prev ? { ...prev, likedByUser: !prev.likedByUser, likes: prev.likedByUser ? prev.likes - 1 : prev.likes + 1 } : prev);
+              if (onToggleLike) onToggleLike(id, post || undefined);
+            }}
+            onToggleBookmark={(id) => {
+              setPost(prev => prev ? { ...prev, bookmarkedByUser: !prev.bookmarkedByUser } : prev);
+              if (onToggleBookmark) onToggleBookmark(id, post || undefined);
+            }}
+            onToggleFollow={(username) => {
+              setPost(prev => prev ? { ...prev, isFollowed: !prev.isFollowed } : prev);
+              if (onToggleFollow) onToggleFollow(username, post || undefined);
+            }}
             userDecks={decks}
-            onSaveCardToDeck={onSaveCardToDeck as any}
-            onRemoveCardFromDeck={onRemoveCardFromDeck}
+            onSaveCardToDeck={(id, deckId) => {
+              if (onSaveCardToDeck) onSaveCardToDeck(id, deckId, post || undefined);
+            }}
+            onSaveToNewDeck={(id, newDeckTitle) => {
+              if (onSaveToNewDeck) onSaveToNewDeck(id, newDeckTitle, post || undefined);
+            }}
+            onRemoveCardFromDeck={(id, deckId) => {
+              if (onRemoveCardFromDeck) onRemoveCardFromDeck(id, deckId, post || undefined);
+            }}
             onDeletePost={onDeletePost}
             onViewProfile={onOpenUserProfile}
             autoOpenComments={autoOpenComments}

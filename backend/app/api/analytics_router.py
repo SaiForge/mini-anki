@@ -4,7 +4,6 @@ Phase 4: Analytics API
 Endpoints:
   GET /api/analytics/study-stats      - aggregated stats for current user
   GET /api/analytics/review-history   - last 30 days of review data
-  GET /api/analytics/leaderboard      - top users by streak / cards reviewed
 """
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -121,40 +120,3 @@ def get_review_history(
         {"date": d, "count": day_counts.get(d, 0)}
         for d in day_list
     ]
-
-
-@router.get("/leaderboard")
-def get_leaderboard(
-    limit: int = 10,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Top users by (streak + posts authored + likes received)."""
-    # Get users with their stats
-    users = db.query(User).filter(User.is_public == True).limit(50).all()
-
-    board = []
-    for u in users:
-        streak = getattr(u, "streak_count", 0) or 0
-        posts = db.query(func.count(Post.post_id)).filter(Post.author_id == u.user_id).scalar() or 0
-        likes = (
-            db.query(func.count(PostLike.like_id))
-            .join(Post, Post.post_id == PostLike.post_id)
-            .filter(Post.author_id == u.user_id)
-            .scalar() or 0
-        )
-        score = streak * 5 + posts * 2 + likes
-        board.append({
-            "user_id": str(u.user_id),
-            "username": u.username,
-            "full_name": u.full_name,
-            "avatar_url": None,
-            "streak": streak,
-            "posts": posts,
-            "likes_received": likes,
-            "score": score,
-            "is_current_user": str(u.user_id) == str(current_user.user_id),
-        })
-
-    board.sort(key=lambda x: x["score"], reverse=True)
-    return board[:limit]

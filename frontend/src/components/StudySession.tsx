@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
-import { 
-  X, 
-  HelpCircle, 
-  CheckCircle, 
-  ChevronRight, 
-  Flame, 
-  Award, 
-  CornerDownRight, 
+import {
+  X,
+  HelpCircle,
+  CheckCircle,
+  ChevronRight,
+  Flame,
+  Award,
+  CornerDownRight,
   Activity,
   Heart,
   Share2,
@@ -38,18 +38,20 @@ interface StudySessionProps {
   onImportDeck?: (deck: any) => void;
   onSaveCardToDeck?: (question: string, answer: string, deckId: string, details?: string) => void;
   onRemoveCardFromDeck?: (question: string, answer: string, deckId: string) => void;
+  onSessionComplete?: (deckId: string) => void;
 }
 
-export default function StudySession({ 
-  deckTitle, 
+export default function StudySession({
+  deckTitle,
   deckId = null,
-  cards: propCards, 
-  onClose, 
-  onCardResult, 
-  isDarkMode = true, 
+  cards: propCards,
+  onClose,
+  onCardResult,
+  isDarkMode = true,
   isPublic = false,
   decks,
-  onImportDeck
+  onImportDeck,
+  onSessionComplete
 }: StudySessionProps) {
   // ── State ─────────────────────────────────────────────────────────────────
   const [apiCards, setApiCards] = useState<Flashcard[]>([]);
@@ -61,7 +63,7 @@ export default function StudySession({
     if (!deckId) return;
     setCardsLoading(true);
     setCardsError(null);
-    
+
     if (isPublic) {
       Promise.all([
         getPublicDeckCards(deckId),
@@ -85,6 +87,7 @@ export default function StudySession({
           setApiCards(dueCards.map(mapDueCardToFlashcard));
           if (dueCards.length === 0) {
             setIsBrowsing(true);
+            if (onSessionComplete) onSessionComplete(deckId);
           }
         })
         .catch(() => {
@@ -164,6 +167,9 @@ export default function StudySession({
       setShowAnswer(false);
     } else {
       setComplete(true);
+      if (deckId && !isPublic && onSessionComplete) {
+        onSessionComplete(deckId);
+      }
     }
   };
 
@@ -198,6 +204,9 @@ export default function StudySession({
       setShowAnswer(false);
     } else {
       setComplete(true);
+      if (deckId && !isPublic && onSessionComplete) {
+        onSessionComplete(deckId);
+      }
     }
   };
 
@@ -212,16 +221,16 @@ export default function StudySession({
   const handleDeleteCard = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!deckId || !activeCard?.id || isPublic) return;
-    
+
     if (window.confirm("Are you sure you want to permanently delete this card?")) {
       setIsDeleting(true);
       try {
         await deleteCard(deckId, activeCard.id);
-        
+
         // Remove from UI
         setApiCards(prev => prev.filter(c => c.id !== activeCard.id));
         setExtraCards(prev => prev.filter(c => c.id !== activeCard.id));
-        
+
         // Advance
         if (currentIndex < flashcards.length - 1) {
           setShowAnswer(false);
@@ -307,14 +316,14 @@ export default function StudySession({
         try {
           // Actually fork the deck on the backend
           const forkedApiDeck = await forkDeck(deckId);
-          
+
           // The forkDeck API currently returns PublicDeck structure, which is very similar to ApiDeck.
           // mapApiDeckToStudyDeck handles formatting.
           const newDeck = mapApiDeckToStudyDeck(forkedApiDeck as any);
-          
+
           // Optionally attach cards if we have them in memory
           newDeck.cards = flashcards;
-          
+
           onImportDeck(newDeck);
         } catch (err) {
           console.error("Failed to fork deck", err);
@@ -326,16 +335,14 @@ export default function StudySession({
     };
 
     return (
-      <div className={`w-full font-sans transition-colors ${
-        isDarkMode ? "text-white" : "text-[#22223b]"
-      }`}>
-        {/* Top sticky/fixed header for premium app feeling */}
-        <div className={`sticky top-0 z-30 backdrop-blur-md border-b px-6 py-4 transition-colors ${
-          isDarkMode ? "bg-[#0a0a0a]/85 border-[#1A1A1A]" : "bg-[#fdfbfb]/85 border-[#ebdcd7]/80"
+      <div className={`w-full font-sans transition-colors ${isDarkMode ? "text-white" : "text-[#22223b]"
         }`}>
+        {/* Top sticky/fixed header for premium app feeling */}
+        <div className={`sticky top-0 z-30 backdrop-blur-md border-b px-6 py-4 transition-colors ${isDarkMode ? "bg-[#0a0a0a]/85 border-[#1A1A1A]" : "bg-[#fdfbfb]/85 border-[#ebdcd7]/80"
+          }`}>
           <div className="max-w-2xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Button 
+              <Button
                 onClick={onClose}
                 variant="ghost"
                 isDarkMode={isDarkMode}
@@ -345,10 +352,9 @@ export default function StudySession({
                 <span className="text-xs font-mono font-bold tracking-widest uppercase">Back</span>
               </Button>
             </div>
-            
-            <span className={`text-[10px] font-mono tracking-widest uppercase font-bold py-0.5 px-2 rounded-xs ${
-              isDarkMode ? "bg-white/10 text-[#d3d0cf]" : "bg-[#22223b]/10 text-[#4a4e69]"
-            }`}>
+
+            <span className={`text-[10px] font-mono tracking-widest uppercase font-bold py-0.5 px-2 rounded-xs ${isDarkMode ? "bg-white/10 text-[#d3d0cf]" : "bg-[#22223b]/10 text-[#4a4e69]"
+              }`}>
               PUBLIC DECK INDEX
             </span>
           </div>
@@ -356,42 +362,38 @@ export default function StudySession({
 
         {/* Scrollable Content Container */}
         <div className="max-w-2xl mx-auto px-6 py-8 space-y-8 pb-32">
-          
+
           {/* 2. Deck Title & Description Area */}
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <h1 className={`text-2xl md:text-3xl font-extrabold tracking-tight font-sans ${
-                isDarkMode ? "text-white" : "text-[#22223b]"
-              }`}>
+              <h1 className={`text-2xl md:text-3xl font-extrabold tracking-tight font-sans ${isDarkMode ? "text-white" : "text-[#22223b]"
+                }`}>
                 {deckTitle}
               </h1>
-              <p className={`text-xs md:text-sm font-light leading-relaxed ${
-                isDarkMode ? "text-zinc-400" : "text-[#4a4e69]/90"
-              }`}>
+              <p className={`text-xs md:text-sm font-light leading-relaxed ${isDarkMode ? "text-zinc-400" : "text-[#4a4e69]/90"
+                }`}>
                 {matchedPublisher.description}
               </p>
             </div>
-            
+
             {/* Tags and Import Action Row */}
             <div className="flex flex-wrap items-center justify-between gap-4 pt-1 border-t border-dotted border-zinc-500/25 mt-2">
               <div className="flex flex-wrap gap-2 py-1">
                 {(matchedPublisher.tags || []).map((tag: any) => (
-                  <span 
+                  <span
                     key={tag}
-                    className={`text-[9.5px] font-mono font-medium px-2.5 py-0.5 rounded-xs uppercase tracking-wider ${
-                      isDarkMode 
-                        ? "bg-zinc-900 text-zinc-400 border border-zinc-800" 
+                    className={`text-[9.5px] font-mono font-medium px-2.5 py-0.5 rounded-xs uppercase tracking-wider ${isDarkMode
+                        ? "bg-zinc-900 text-zinc-400 border border-zinc-800"
                         : "bg-[#eed9d2]/40 text-[#22223b] border border-[#ebdcd7]"
-                    }`}
+                      }`}
                   >
                     #{tag.toLowerCase()}
                   </span>
                 ))}
-                <span className={`text-[9.5px] font-mono px-2.5 py-0.5 rounded-xs border border-dashed uppercase tracking-wider ${
-                  isDarkMode 
-                    ? "border-zinc-800 text-zinc-400" 
+                <span className={`text-[9.5px] font-mono px-2.5 py-0.5 rounded-xs border border-dashed uppercase tracking-wider ${isDarkMode
+                    ? "border-zinc-800 text-zinc-400"
                     : "border-[#c9ada7] text-[#4a4e69]/70"
-                }`}>
+                  }`}>
                   {flashcards.length} cards
                 </span>
                 <button
@@ -400,13 +402,12 @@ export default function StudySession({
                     setLikedDeck(nextLiked);
                     setDeckLikes(curr => nextLiked ? curr + 1 : curr - 1);
                   }}
-                  className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-xs text-[9.5px] font-mono tracking-wider transition-colors cursor-pointer border ${
-                    likedDeck
+                  className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-xs text-[9.5px] font-mono tracking-wider transition-colors cursor-pointer border ${likedDeck
                       ? "bg-red-500/10 border-red-500/45 text-red-500"
                       : isDarkMode
                         ? "bg-transparent border-zinc-800 text-zinc-400 hover:text-white"
                         : "bg-transparent border-[#c9ada7] text-[#4a4e69] hover:text-[#22223b]"
-                  }`}
+                    }`}
                 >
                   <Heart className={`w-3 h-3 ${likedDeck ? "fill-red-500 text-red-500" : ""}`} />
                   <span>{deckLikes} likes</span>
@@ -415,11 +416,10 @@ export default function StudySession({
 
               <div>
                 {isAlreadyImported ? (
-                  <div className={`flex items-center gap-1.5 px-3.5 py-1.5 text-[10px] font-mono tracking-wider font-semibold uppercase rounded-xs border ${
-                    isDarkMode 
-                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" 
+                  <div className={`flex items-center gap-1.5 px-3.5 py-1.5 text-[10px] font-mono tracking-wider font-semibold uppercase rounded-xs border ${isDarkMode
+                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
                       : "bg-emerald-50 border-emerald-200 text-emerald-800"
-                  }`}>
+                    }`}>
                     <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
                     <span>In Your Studies</span>
                   </div>
@@ -452,18 +452,17 @@ export default function StudySession({
                 </span>
               </div>
             </div>
-            
+
             <button
               onClick={() => setFollowed(!followed)}
-              className={`text-xs font-mono uppercase font-bold tracking-wider transition-colors flex items-center gap-1 cursor-pointer ${
-                followed
-                  ? isDarkMode 
-                    ? "text-zinc-500 hover:text-zinc-400" 
+              className={`text-xs font-mono uppercase font-bold tracking-wider transition-colors flex items-center gap-1 cursor-pointer ${followed
+                  ? isDarkMode
+                    ? "text-zinc-500 hover:text-zinc-400"
                     : "text-[#4a4e69]/70 hover:text-[#4a4e69]"
                   : isDarkMode
-                    ? "text-white hover:text-zinc-300" 
+                    ? "text-white hover:text-zinc-300"
                     : "text-[#22223b] hover:text-[#4a4e69]"
-              }`}
+                }`}
             >
               {followed ? "Following" : "Follow"}
             </button>
@@ -474,14 +473,12 @@ export default function StudySession({
           {/* 3. Scrolling Feed of Cards (matching Feed view aesthetics exactly) */}
           <div className="space-y-6">
             <div className="flex items-center justify-between">
-              <span className={`text-[10px] font-mono tracking-widest uppercase font-bold ${
-                isDarkMode ? "text-zinc-400" : "text-[#4a4e69]/70"
-              }`}>
+              <span className={`text-[10px] font-mono tracking-widest uppercase font-bold ${isDarkMode ? "text-zinc-400" : "text-[#4a4e69]/70"
+                }`}>
                 CONCEPTS IN THIS DECK
               </span>
-              <span className={`text-[9px] font-mono uppercase ${
-                isDarkMode ? "text-zinc-400/80" : "text-[#4a4e69]/50"
-              }`}>
+              <span className={`text-[9px] font-mono uppercase ${isDarkMode ? "text-zinc-400/80" : "text-[#4a4e69]/50"
+                }`}>
                 TAP A CARD TO REVEAL
               </span>
             </div>
@@ -517,27 +514,23 @@ export default function StudySession({
   }
 
   return (
-    <div className={`fixed inset-0 z-50 flex flex-col justify-between p-6 overflow-y-auto font-sans select-none transition-colors ${
-      isDarkMode ? "bg-black text-white" : "bg-[#f2e9e4] text-[#22223b]"
-    }`}>
-      
-      {/* Session Top Bar */}
-      <header className={`flex items-center justify-between py-4 border-b max-w-2xl w-full mx-auto ${
-        isDarkMode ? "border-[#1A1A1A]" : "border-[#c9ada7]/60"
+    <div className={`fixed inset-0 z-50 flex flex-col justify-between p-6 overflow-y-auto font-sans select-none transition-colors ${isDarkMode ? "bg-black text-white" : "bg-[#f2e9e4] text-[#22223b]"
       }`}>
+
+      {/* Session Top Bar */}
+      <header className={`flex items-center justify-between py-4 border-b max-w-2xl w-full mx-auto ${isDarkMode ? "border-[#1A1A1A]" : "border-[#c9ada7]/60"
+        }`}>
         <div className="flex items-center gap-3">
           <Activity className={`w-4 h-4 animate-pulse ${isDarkMode ? "text-white" : "text-[#22223b]"}`} />
           <div className="space-y-0.5">
-            <span className={`text-[10px] font-mono tracking-widest uppercase ${
-              isDarkMode ? "text-on-surface-variant/40" : "text-[#4a4e69]/70"
-            }`}>Active Session</span>
-            <h2 className={`text-xs font-bold tracking-wide uppercase ${
-              isDarkMode ? "text-white" : "text-[#22223b]"
-            }`}>{deckTitle}</h2>
+            <span className={`text-[10px] font-mono tracking-widest uppercase ${isDarkMode ? "text-on-surface-variant/40" : "text-[#4a4e69]/70"
+              }`}>Active Session</span>
+            <h2 className={`text-xs font-bold tracking-wide uppercase ${isDarkMode ? "text-white" : "text-[#22223b]"
+              }`}>{deckTitle}</h2>
           </div>
         </div>
 
-        <Button 
+        <Button
           onClick={onClose}
           variant="ghost"
           size="icon"
@@ -589,21 +582,18 @@ export default function StudySession({
             <div className="space-y-2">
               <h1 className={`text-xl font-bold ${isDarkMode ? "text-white" : "text-[#22223b]"}`}>Focus Track Concluded</h1>
               <p className={`text-xs ${isDarkMode ? "text-on-surface-variant/80" : "text-[#4a4e69]/80"}`}>
-                You successfully evaluated <span className={`font-mono font-bold ${
-                  isDarkMode ? "text-white" : "text-[#22223b]"
-                }`}>{sessionScore} / {flashcards.length}</span> key structures.
+                You successfully evaluated <span className={`font-mono font-bold ${isDarkMode ? "text-white" : "text-[#22223b]"
+                  }`}>{sessionScore} / {flashcards.length}</span> key structures.
               </p>
             </div>
 
-            <div className={`flex items-center justify-center gap-2 p-4 rounded-xs text-[11px] max-w-xs mx-auto border ${
-              isDarkMode 
-                ? "bg-[#111111] border-[#222222] text-white" 
+            <div className={`flex items-center justify-center gap-2 p-4 rounded-xs text-[11px] max-w-xs mx-auto border ${isDarkMode
+                ? "bg-[#111111] border-[#222222] text-white"
                 : "bg-[#fdfbfb] border-[#c9ada7] text-[#22223b]"
-            }`}>
-              <Flame className={`w-4 h-4 ${isDarkMode ? "text-white" : "text-[#22223b]"}`} />
-              <span className={`font-mono uppercase tracking-wider ${
-                isDarkMode ? "text-on-surface-variant" : "text-[#4a4e69]"
               }`}>
+              <Flame className={`w-4 h-4 ${isDarkMode ? "text-white" : "text-[#22223b]"}`} />
+              <span className={`font-mono uppercase tracking-wider ${isDarkMode ? "text-on-surface-variant" : "text-[#4a4e69]"
+                }`}>
                 DAILY STREAK VERIFIED +1 EXP
               </span>
             </div>
@@ -638,87 +628,76 @@ export default function StudySession({
         ) : (
           /* Active studying view block card */
           <div className="w-full space-y-6">
-            
+
             {/* Progression indicator */}
-            <div className={`flex items-center justify-between text-[11px] font-mono ${
-              isDarkMode ? "text-on-surface-variant/40" : "text-[#4a4e69]/70"
-            }`}>
+            <div className={`flex items-center justify-between text-[11px] font-mono ${isDarkMode ? "text-on-surface-variant/40" : "text-[#4a4e69]/70"
+              }`}>
               <span>CARD MODULE INDEX: {currentIndex + 1} OF {flashcards.length}</span>
               <span>SCORE: {sessionScore} ACCUMULATED</span>
             </div>
 
             {/* Flashcard container block */}
-            <div 
+            <div
               onClick={() => setShowAnswer(!showAnswer)}
-              className={`w-full p-5 md:p-10 lg:p-12 border rounded-lg transition-all duration-300 min-h-[180px] md:min-h-[260px] flex flex-col justify-between cursor-pointer relative active:scale-[0.99] select-none shadow-md ${
-                showAnswer 
-                  ? isDarkMode 
-                    ? "border-white/40 bg-zinc-900/40 shadow-none" 
+              className={`w-full p-5 md:p-10 lg:p-12 border rounded-lg transition-all duration-300 min-h-[180px] md:min-h-[260px] flex flex-col justify-between cursor-pointer relative active:scale-[0.99] select-none shadow-md ${showAnswer
+                  ? isDarkMode
+                    ? "border-white/40 bg-zinc-900/40 shadow-none"
                     : "border-[#c9ada7] bg-[#ebdcd7]/60 shadow-inner"
                   : isDarkMode
                     ? "border-[#1A1A1A] bg-black hover:border-white/20 hover:bg-[#070707]"
                     : "border-[#c9ada7] bg-[#fdfbfb] hover:border-[#22223b] hover:bg-[#ffffff] hover:translate-y-[-2px] shadow-[0_4px_24px_rgba(34,34,59,0.06)] hover:shadow-[0_8px_32px_rgba(34,34,59,0.1)]"
-              }`}
+                }`}
             >
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className={`text-[10px] font-mono uppercase tracking-[0.2em] flex items-center gap-1.5 ${
-                    isDarkMode ? "text-white" : "text-[#22223b] font-semibold"
-                  }`}>
+                  <span className={`text-[10px] font-mono uppercase tracking-[0.2em] flex items-center gap-1.5 ${isDarkMode ? "text-white" : "text-[#22223b] font-semibold"
+                    }`}>
                     <HelpCircle className="w-3.5 h-3.5" />
                     <span>Question Query</span>
                   </span>
-                  
+
                   <div className="flex items-center gap-2">
                     {!isPublic && deckId && activeCard?.id && (
                       <button
                         onClick={handleDeleteCard}
                         disabled={isDeleting}
                         title="Delete Card"
-                        className={`p-1 rounded cursor-pointer transition-colors ${
-                          isDarkMode ? "text-zinc-500 hover:text-red-400 hover:bg-red-950/30" : "text-zinc-400 hover:text-red-600 hover:bg-red-50"
-                        }`}
+                        className={`p-1 rounded cursor-pointer transition-colors ${isDarkMode ? "text-zinc-500 hover:text-red-400 hover:bg-red-950/30" : "text-zinc-400 hover:text-red-600 hover:bg-red-50"
+                          }`}
                       >
                         {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                       </button>
                     )}
                   </div>
                 </div>
-                <p className={`text-sm md:text-base font-light leading-normal tracking-wide ${
-                  isDarkMode ? "text-white" : "text-[#22223b] font-medium"
-                }`}>
+                <p className={`text-sm md:text-base font-light leading-normal tracking-wide ${isDarkMode ? "text-white" : "text-[#22223b] font-medium"
+                  }`}>
                   {activeCard.question}
                 </p>
               </div>
 
               {showAnswer ? (
                 /* Revealed state answer view */
-                <div className={`space-y-4 pt-6 border-t animated fadeIn ${
-                  isDarkMode ? "border-[#1A1A1A]/70" : "border-[#c9ada7]"
-                }`}>
-                  <span className={`text-[10px] font-mono uppercase tracking-[0.2em] flex items-center gap-1.5 ${
-                    isDarkMode ? "text-green-400" : "text-emerald-700 font-semibold"
+                <div className={`space-y-4 pt-6 border-t animated fadeIn ${isDarkMode ? "border-[#1A1A1A]/70" : "border-[#c9ada7]"
                   }`}>
+                  <span className={`text-[10px] font-mono uppercase tracking-[0.2em] flex items-center gap-1.5 ${isDarkMode ? "text-green-400" : "text-emerald-700 font-semibold"
+                    }`}>
                     <CheckCircle className={`w-3.5 h-3.5 ${isDarkMode ? "text-green-400" : "text-emerald-700"}`} />
                     <span>Reference Outcome</span>
                   </span>
-                  <p className={`text-xs md:text-sm font-mono leading-relaxed ${
-                    isDarkMode ? "text-white" : "text-[#22223b]"
-                  }`}>
+                  <p className={`text-xs md:text-sm font-mono leading-relaxed ${isDarkMode ? "text-white" : "text-[#22223b]"
+                    }`}>
                     {activeCard.answer}
                   </p>
                   {activeCard.details && (
-                    <div className={`flex gap-1.5 items-start p-3 border rounded-xs ${
-                      isDarkMode 
-                        ? "bg-black/40 border-[#1a1a1a]" 
+                    <div className={`flex gap-1.5 items-start p-3 border rounded-xs ${isDarkMode
+                        ? "bg-black/40 border-[#1a1a1a]"
                         : "bg-[#ebdcd7]/30 border-[#c9ada7]"
-                    }`}>
-                      <CornerDownRight className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${
-                        isDarkMode ? "text-on-surface-variant/40" : "text-[#4a4e69]/50"
-                      }`} />
-                      <p className={`text-[10px] font-light italic leading-relaxed ${
-                        isDarkMode ? "text-on-surface-variant" : "text-[#4a4e69]"
                       }`}>
+                      <CornerDownRight className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${isDarkMode ? "text-on-surface-variant/40" : "text-[#4a4e69]/50"
+                        }`} />
+                      <p className={`text-[10px] font-light italic leading-relaxed ${isDarkMode ? "text-on-surface-variant" : "text-[#4a4e69]"
+                        }`}>
                         {activeCard.details}
                       </p>
                     </div>
@@ -727,9 +706,8 @@ export default function StudySession({
               ) : (
                 /* Unrevealed tip indicator bar */
                 <div className="pt-6 border-t border-transparent text-center">
-                  <span className={`text-[11px] font-mono uppercase tracking-widest animate-pulse ${
-                    isDarkMode ? "text-white" : "text-[#22223b]/80"
-                  }`}>
+                  <span className={`text-[11px] font-mono uppercase tracking-widest animate-pulse ${isDarkMode ? "text-white" : "text-[#22223b]/80"
+                    }`}>
                     Tap to reveal answer
                   </span>
                 </div>
@@ -740,11 +718,10 @@ export default function StudySession({
             {isPublic ? (
               <div className="space-y-4 pt-4">
                 {/* Social Interaction Toolbar */}
-                <div className={`flex items-center justify-between px-4 py-3.5 border rounded-xs transition-colors ${
-                  isDarkMode 
-                    ? "bg-[#0b0b0b] border-[#1c1c1c]" 
+                <div className={`flex items-center justify-between px-4 py-3.5 border rounded-xs transition-colors ${isDarkMode
+                    ? "bg-[#0b0b0b] border-[#1c1c1c]"
                     : "bg-[#fcf8f6] border-[#ebdcd7]"
-                }`}>
+                  }`}>
                   <div className="flex items-center gap-6">
                     {/* Likes button */}
                     <button
@@ -752,18 +729,16 @@ export default function StudySession({
                         setIsLiked(!isLiked);
                         setLocalLikes(curr => isLiked ? curr - 1 : curr + 1);
                       }}
-                      className={`flex items-center gap-2 transition-colors group/btn cursor-pointer ${
-                        isLiked 
-                          ? "text-red-500 font-semibold" 
-                          : isDarkMode 
-                            ? "text-[#a3a3a3] hover:text-white" 
+                      className={`flex items-center gap-2 transition-colors group/btn cursor-pointer ${isLiked
+                          ? "text-red-500 font-semibold"
+                          : isDarkMode
+                            ? "text-[#a3a3a3] hover:text-white"
                             : "text-[#4a4e69] hover:text-[#22223b]"
-                      }`}
+                        }`}
                     >
                       <Heart
-                        className={`w-4 h-4 transition-transform group-hover/btn:scale-110 ${
-                          isLiked ? "text-red-500 fill-red-500" : ""
-                        }`}
+                        className={`w-4 h-4 transition-transform group-hover/btn:scale-110 ${isLiked ? "text-red-500 fill-red-500" : ""
+                          }`}
                       />
                       <span className="text-[11px] font-mono">
                         {localLikes}
@@ -779,11 +754,10 @@ export default function StudySession({
                         }
                         setTimeout(() => setShared(false), 2000);
                       }}
-                      className={`flex items-center gap-2 transition-colors group/btn cursor-pointer ${
-                        isDarkMode 
-                          ? "text-[#a3a3a3] hover:text-white" 
+                      className={`flex items-center gap-2 transition-colors group/btn cursor-pointer ${isDarkMode
+                          ? "text-[#a3a3a3] hover:text-white"
                           : "text-[#4a4e69] hover:text-[#22223b]"
-                      }`}
+                        }`}
                       title="Share this concept"
                     >
                       <Share2 className="w-4 h-4 transition-transform group-hover/btn:scale-110" />
@@ -796,17 +770,15 @@ export default function StudySession({
                   {/* Bookmark Save button */}
                   <button
                     onClick={() => setIsSaved(!isSaved)}
-                    className={`flex items-center gap-2 transition-colors group/btn cursor-pointer ${
-                      isSaved 
+                    className={`flex items-center gap-2 transition-colors group/btn cursor-pointer ${isSaved
                         ? isDarkMode ? "text-white" : "text-[#22223b]"
                         : isDarkMode ? "text-[#a3a3a3] hover:text-white" : "text-[#4a4e69] hover:text-[#22223b]"
-                    }`}
+                      }`}
                     title="Save to Personal Decks"
                   >
                     <Bookmark
-                      className={`w-4 h-4 transition-transform group-hover/btn:scale-110 ${
-                        isSaved ? "fill-current" : ""
-                      }`}
+                      className={`w-4 h-4 transition-transform group-hover/btn:scale-110 ${isSaved ? "fill-current" : ""
+                        }`}
                     />
                     <span className="text-[11px] font-mono">
                       {isSaved ? "Saved" : "Save"}
@@ -840,36 +812,33 @@ export default function StudySession({
               /* Private study session — 4-button SRS grading after reveal */
               showAnswer ? (
                 <div className="space-y-3 pt-4">
-                  <p className={`text-center text-[10px] font-mono uppercase tracking-widest ${
-                    isDarkMode ? "text-on-surface-variant/40" : "text-[#4a4e69]/60"
-                  }`}>How well did you know this?</p>
+                  <p className={`text-center text-[10px] font-mono uppercase tracking-widest ${isDarkMode ? "text-on-surface-variant/40" : "text-[#4a4e69]/60"
+                    }`}>How well did you know this?</p>
                   <div className="grid grid-cols-4 gap-2 text-[11px] font-mono">
                     {(["Again", "Hard", "Good", "Easy"] as SrsGrade[]).map((grade) => {
                       const styles: Record<SrsGrade, string> = {
                         Again: "border-red-900/60 text-red-400 hover:bg-red-950/30 hover:border-red-500",
-                        Hard:  "border-orange-900/60 text-orange-400 hover:bg-orange-950/30 hover:border-orange-500",
-                        Good:  "border-emerald-900/60 text-emerald-400 hover:bg-emerald-950/30 hover:border-emerald-500",
-                        Easy:  "border-blue-900/60 text-blue-400 hover:bg-blue-950/30 hover:border-blue-500",
+                        Hard: "border-orange-900/60 text-orange-400 hover:bg-orange-950/30 hover:border-orange-500",
+                        Good: "border-emerald-900/60 text-emerald-400 hover:bg-emerald-950/30 hover:border-emerald-500",
+                        Easy: "border-blue-900/60 text-blue-400 hover:bg-blue-950/30 hover:border-blue-500",
                       };
                       return (
                         <button
                           key={grade}
                           onClick={() => handleRate(grade)}
                           disabled={grading}
-                          className={`py-3 px-2 border rounded-xs uppercase tracking-wider font-bold transition-all cursor-pointer disabled:opacity-40 flex items-center justify-center gap-1.5 ${
-                            isDarkMode
+                          className={`py-3 px-2 border rounded-xs uppercase tracking-wider font-bold transition-all cursor-pointer disabled:opacity-40 flex items-center justify-center gap-1.5 ${isDarkMode
                               ? `bg-transparent ${styles[grade]}`
                               : "bg-[#fdfbfb] border-[#c9ada7] text-[#22223b] hover:bg-[#f2e9e4]"
-                          }`}
+                            }`}
                         >
                           {grading ? <Loader2 className="w-3 h-3 animate-spin" /> : grade}
                         </button>
                       );
                     })}
                   </div>
-                  <p className={`text-center text-[9px] font-mono uppercase tracking-widest ${
-                    isDarkMode ? "text-on-surface-variant/25" : "text-[#4a4e69]/40"
-                  }`}>
+                  <p className={`text-center text-[9px] font-mono uppercase tracking-widest ${isDarkMode ? "text-on-surface-variant/25" : "text-[#4a4e69]/40"
+                    }`}>
                     Again = retry soon · Hard = needs work · Good = on track · Easy = fast-forward
                   </p>
                 </div>
@@ -890,11 +859,10 @@ export default function StudySession({
       </main>
 
       {/* Dynamic hotkey instructions bar */}
-      <footer className={`py-4 border-t max-w-2xl w-full mx-auto text-center text-[10px] font-mono tracking-wider ${
-        isDarkMode 
-          ? "border-[#1A1A1A] text-on-surface-variant/20" 
+      <footer className={`py-4 border-t max-w-2xl w-full mx-auto text-center text-[10px] font-mono tracking-wider ${isDarkMode
+          ? "border-[#1A1A1A] text-on-surface-variant/20"
           : "border-[#c9ada7]/30 text-[#4a4e69]/50"
-      }`}>
+        }`}>
         KEYBOARD CONSTRAINTS: [ SPACEBAR ] TO REVEAL • [ ← ] PREV / REVIEW • [ → ] KNOWN
       </footer>
 

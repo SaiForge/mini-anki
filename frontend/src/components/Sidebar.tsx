@@ -7,7 +7,8 @@ import {
   Settings, 
   Terminal,
   Search,
-  MessageSquare
+  MessageSquare,
+  BarChart2
 } from "lucide-react";
 import { Button } from "./ui/Button";
 import { getUnreadCount } from "../api/notificationsApi";
@@ -34,7 +35,14 @@ export default function Sidebar({ activeTab, setActiveTab, onStudyNowClick }: Si
     };
     load();
     const interval = setInterval(load, 30000);
-    return () => { mounted = false; clearInterval(interval); };
+    
+    window.addEventListener('fetch_unread_counts', load);
+    
+    return () => { 
+      mounted = false; 
+      clearInterval(interval); 
+      window.removeEventListener('fetch_unread_counts', load);
+    };
   }, []);
 
   const navItems = [
@@ -42,6 +50,7 @@ export default function Sidebar({ activeTab, setActiveTab, onStudyNowClick }: Si
     { id: "feed", label: "Explore", icon: Compass },
     { id: "explore", label: "Search", icon: Search },
     { id: "messages", label: "Messages", icon: MessageSquare, badge: dmUnreadCount },
+    { id: "analytics", label: "Analytics", icon: BarChart2 },
     { id: "notifications", label: "Notifications", icon: Bell, badge: unreadCount },
     { id: "profile", label: "Profile", icon: User },
   ];
@@ -69,9 +78,6 @@ export default function Sidebar({ activeTab, setActiveTab, onStudyNowClick }: Si
               key={item.id}
               onClick={() => {
                 setActiveTab(item.id);
-                // Clear badge when navigating to relevant tab
-                if (item.id === "notifications") setUnreadCount(0);
-                if (item.id === "messages") setDmUnreadCount(0);
               }}
               className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xs text-left transition-all duration-150 group cursor-pointer ${
                 isActive

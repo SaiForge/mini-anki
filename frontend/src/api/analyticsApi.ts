@@ -15,17 +15,7 @@ export interface DayCount {
   count: number;
 }
 
-export interface LeaderboardEntry {
-  user_id: string;
-  username: string | null;
-  full_name: string | null;
-  avatar_url: string | null;
-  streak: number;
-  posts: number;
-  likes_received: number;
-  score: number;
-  is_current_user: boolean;
-}
+
 
 export const getStudyStats = async (): Promise<StudyStats> => {
   const res = await axiosClient.get("/api/analytics/study-stats");
@@ -37,7 +27,4 @@ export const getReviewHistory = async (days = 30): Promise<DayCount[]> => {
   return res.data;
 };
 
-export const getLeaderboard = async (limit = 10): Promise<LeaderboardEntry[]> => {
-  const res = await axiosClient.get("/api/analytics/leaderboard", { params: { limit } });
-  return res.data;
-};
+
