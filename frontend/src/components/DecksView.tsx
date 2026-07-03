@@ -142,7 +142,7 @@ export default function DecksView({
             >
               {deck.title.replace(/📚\s*/g, '')}
             </h3>
-            <p className="text-[11px] text-on-surface-variant leading-relaxed max-w-xl">
+            <p className="text-[11px] text-on-surface-variant leading-relaxed max-w-xl line-clamp-2">
               {deck.description || deck.category?.toLowerCase()}
             </p>
           </div>

@@ -14,7 +14,17 @@ class AIService:
         if not GEMINI_API_KEY:
             raise ValueError("GEMINI_API_KEY not configured")
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+        MODELS = [
+            "gemini-3.5-flash",
+            "gemini-3.1-flash-lite",
+            "gemini-3.0-flash",
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite",
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-lite",
+            "gemma-4-31b",
+            "gemma-4-26b"
+        ]
         
         system_instruction = (
             "You are a flashcard generator. You must generate flashcards based on the user prompt. "
@@ -42,15 +52,27 @@ class AIService:
         }
 
         data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+        
+        last_error = None
+        cards = None
+        
+        for model in MODELS:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
+            req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
 
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                result = json.load(resp)
-                content = result["candidates"][0]["content"]["parts"][0]["text"]
-                cards = json.loads(content)
-        except Exception as e:
-            raise ValueError(f"AI generation failed: {str(e)}")
+            try:
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    result = json.load(resp)
+                    content = result["candidates"][0]["content"]["parts"][0]["text"]
+                    cards = json.loads(content)
+                    break
+            except Exception as e:
+                last_error = e
+                print(f"Model {model} failed: {e}")
+                continue
+
+        if cards is None:
+            raise ValueError(f"AI generation failed on all models. Last error: {str(last_error)}")
 
         posts = []
         for card in cards:

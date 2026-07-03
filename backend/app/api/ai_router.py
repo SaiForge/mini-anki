@@ -55,14 +55,24 @@ class SummarizeRequest(BaseModel):
 # ─── Gemini helper ────────────────────────────────────────────────────────────
 
 def _call_gemini(prompt: str, system_instruction: str = "") -> str:
-    """Call Gemini 2.0 Flash via REST API. Returns text response."""
+    """Call Gemini 2.0 Flash via REST API with fallbacks. Returns text response."""
     if not GEMINI_API_KEY:
         raise ValueError("GEMINI_API_KEY not configured")
 
     import urllib.request
     import urllib.error
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+    MODELS = [
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-2.5-flash-lite",
+        "gemini-3.0-flash",
+        "gemini-3.1-flash-lite",
+        "gemini-3.5-flash",
+        "gemma-4-31b",
+        "gemma-4-26b"
+    ]
 
     contents = [{"role": "user", "parts": [{"text": prompt}]}]
     payload = {
@@ -76,33 +86,51 @@ def _call_gemini(prompt: str, system_instruction: str = "") -> str:
         payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
 
     data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+    
+    last_error_e = None
+    last_error_body = None
 
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            result = json.load(resp)
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")
-        if e.code == 429:
+    for model in MODELS:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                result = json.load(resp)
+                try:
+                    return result["candidates"][0]["content"]["parts"][0]["text"]
+                except (KeyError, IndexError):
+                    raise ValueError("Unexpected Gemini response format")
+        except urllib.error.HTTPError as e:
+            last_error_e = e
+            last_error_body = e.read().decode("utf-8", errors="replace")
+            # If rate limited (429) or server error (5xx), fallback to next model
+            if e.code in (429, 500, 502, 503, 504):
+                print(f"Model {model} failed with {e.code}, falling back...")
+                continue
+            # For 400 or 403, we shouldn't retry as it's likely a bad request/key
+            break
+        except Exception as e:
+            last_error_e = e
+            print(f"Model {model} failed with {str(e)}, falling back...")
+            continue
+
+    if isinstance(last_error_e, urllib.error.HTTPError):
+        if last_error_e.code == 429:
             raise HTTPException(
                 status_code=429,
-                detail="Gemini rate limit reached. Please wait a moment and try again."
+                detail="Gemini rate limit reached on all fallback models. Please wait a moment and try again."
             )
-        elif e.code == 400:
-            raise HTTPException(status_code=400, detail=f"Invalid request to Gemini: {body[:200]}")
-        elif e.code == 403:
+        elif last_error_e.code == 400:
+            raise HTTPException(status_code=400, detail=f"Invalid request to Gemini: {last_error_body[:200] if last_error_body else ''}")
+        elif last_error_e.code == 403:
             raise HTTPException(status_code=403, detail="Gemini API key is invalid or lacks permissions.")
         else:
-            raise HTTPException(status_code=502, detail=f"Gemini API error {e.code}: {body[:200]}")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"AI service unreachable: {str(e)}")
-
-    try:
-        return result["candidates"][0]["content"]["parts"][0]["text"]
-    except (KeyError, IndexError):
-        raise ValueError("Unexpected Gemini response format")
+            raise HTTPException(status_code=502, detail=f"Gemini API error {last_error_e.code}: {last_error_body[:200] if last_error_body else ''}")
+    elif last_error_e:
+        raise HTTPException(status_code=502, detail=f"AI service unreachable: {str(last_error_e)}")
+        
+    raise ValueError("Unexpected error in Gemini service.")
 
 
 
