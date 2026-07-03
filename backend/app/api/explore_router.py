@@ -179,15 +179,29 @@ def browse_public_cards(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Return individual cards from public decks, formatted for the feed."""
-    from app.db.redis import get_cache_sync, set_cache_sync
-    import json
+    """Return individual cards from public decks, formatted for the feed.
     
-    cache_key = f"explore:cards:{current_user.user_id}:{skip}:{limit}"
-    cached = get_cache_sync(cache_key)
-    if cached:
-        return cached
+    Optimized: batched DeckLike lookup (single IN query instead of N queries),
+    global cache key shared across all users (user-specific likes layered on top).
+    """
+    from app.db.redis import get_cache_sync, set_cache_sync
 
+    # --- Global cache: all users share the base page (deck/card data) ---
+    global_cache_key = f"explore:cards:global:{skip}:{limit}"
+    # --- Per-user like status (tiny, fast) ---
+    likes_cache_key = f"explore:cards:likes:{current_user.user_id}:{skip}:{limit}"
+
+    base_cached = get_cache_sync(global_cache_key)
+    likes_cached = get_cache_sync(likes_cache_key)
+
+    if base_cached and likes_cached is not None:
+        # Merge likes back into base result
+        liked_set = set(likes_cached)
+        for item in base_cached:
+            item["likedByUser"] = item["deckId"] in liked_set
+        return {"items": base_cached, "total": len(base_cached)}
+
+    # Fetch cards + decks in a single join query
     cards = (
         db.query(Card, Deck)
         .join(Deck, Card.deck_id == Deck.deck_id)
@@ -198,16 +212,32 @@ def browse_public_cards(
         .all()
     )
 
+    if not cards:
+        return {"items": [], "total": 0}
+
+    # --- Batch: get all unique deck_ids from this page ---
+    page_deck_ids = list({deck.deck_id for _, deck in cards})
+
+    # --- Single IN-query for likes instead of N individual queries ---
+    liked_deck_ids: set = set()
+    if not likes_cached:
+        liked_deck_ids = {
+            row[0]
+            for row in db.query(DeckLike.deck_id)
+            .filter(
+                DeckLike.deck_id.in_(page_deck_ids),
+                DeckLike.user_id == current_user.user_id,
+            )
+            .all()
+        }
+        # Cache the list of liked deck_ids for this user+page (60s)
+        set_cache_sync(likes_cache_key, [str(d) for d in liked_deck_ids], expire_seconds=60)
+    else:
+        liked_deck_ids = set(likes_cached)
+
     result = []
     for card, deck in cards:
-        # Determine if the user liked the deck
-        is_liked = db.query(DeckLike).filter(
-            DeckLike.deck_id == deck.deck_id,
-            DeckLike.user_id == current_user.user_id
-        ).first() is not None
-        
-        owner_name = deck.owner.full_name or deck.owner.username if deck.owner else "Anonymous"
-        
+        owner_name = (deck.owner.full_name or deck.owner.username) if deck.owner else "Anonymous"
         result.append({
             "id": str(card.card_id),
             "deckId": str(deck.deck_id),
@@ -216,7 +246,7 @@ def browse_public_cards(
             "content": card.front_text,
             "codeSnippet": card.back_text,
             "likes": deck.like_count or 0,
-            "likedByUser": is_liked,
+            "likedByUser": deck.deck_id in liked_deck_ids,
             "timeLabel": deck.created_at.isoformat() if deck.created_at else None,
             "authorName": owner_name,
             "authorUsername": deck.owner.username if deck.owner else None,
@@ -224,11 +254,12 @@ def browse_public_cards(
             "authorAvatarUrl": None,
             "tags": deck.tags or [],
             "commentsCount": deck.comment_count or 0,
-            "isDeckCard": True, # Custom flag for frontend
+            "isDeckCard": True,
         })
-        
-    set_cache_sync(cache_key, result, expire_seconds=60)
-    return {"items": result, "total": len(result)} # total here is just paginated count
+
+    # Cache global base data for 120s (shared across all users)
+    set_cache_sync(global_cache_key, result, expire_seconds=120)
+    return {"items": result, "total": len(result)}
 
 
 
@@ -315,6 +346,18 @@ def search(
     }
 
 
+def _clear_explore_cache():
+    from app.db.redis import get_redis_sync
+    redis = get_redis_sync()
+    if redis:
+        try:
+            keys = redis.keys("explore:*")
+            if keys:
+                redis.delete(*keys)
+        except Exception as e:
+            pass
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # DECK SHARING ENDPOINTS  (mounted at /api/decks/...)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -342,6 +385,8 @@ def update_deck_metadata(
         deck.tags = payload["tags"]
     db.commit()
     db.refresh(deck)
+    if deck.is_public:
+        _clear_explore_cache()
     return _annotate_decks_batched([deck], current_user.user_id, db)[0]
 
 
@@ -359,6 +404,7 @@ def publish_deck(
         raise HTTPException(status_code=404, detail="Deck not found")
     deck.is_public = True
     db.commit()
+    _clear_explore_cache()
     return {"message": "Deck published", "is_public": True}
 
 

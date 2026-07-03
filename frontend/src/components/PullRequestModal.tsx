@@ -80,15 +80,15 @@ export function PullRequestModal({ deckId, onClose, onApproved }: PullRequestMod
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="border border-[#1A1A1A] rounded-xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[80vh] bg-[#0c0c0c]">
-        <div className="flex items-center justify-between p-4 border-b border-[#1A1A1A]">
-          <div className="flex items-center gap-2 text-[var(--theme-on-surface)]">
+      <div className="border border-outline-variant rounded-xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh] bg-surface-lowest">
+        <div className="flex items-center justify-between p-4 border-b border-outline-variant bg-surface-low/50">
+          <div className="flex items-center gap-2 text-on-surface">
             <GitPullRequest className="w-5 h-5" />
             <h2 className="text-sm font-bold uppercase tracking-wide">
               Pending Contributions
             </h2>
           </div>
-          <button onClick={onClose} className="p-1 rounded text-on-surface-variant hover:bg-[#131313] hover:text-white transition-colors">
+          <button onClick={onClose} className="p-1 rounded text-on-surface-variant hover:bg-surface-low hover:text-on-surface transition-colors cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -110,10 +110,10 @@ export function PullRequestModal({ deckId, onClose, onApproved }: PullRequestMod
                 const canApprove = selectedCount > 0;
 
                 return (
-                  <div key={pr.pr_id} className="border border-[#1A1A1A] rounded-lg p-4 bg-[#111111]">
+                  <div key={pr.pr_id} className="border border-outline-variant rounded-lg p-4 bg-surface-low/30">
                     <div className="flex justify-between items-start mb-2">
                       <div>
-                        <span className="text-sm font-bold font-sans text-white">
+                        <span className="text-sm font-bold font-sans text-on-surface">
                           @{pr.author_username || "Unknown"}
                         </span>
                         <span className="text-[11px] ml-2 text-on-surface-variant">
@@ -126,18 +126,18 @@ export function PullRequestModal({ deckId, onClose, onApproved }: PullRequestMod
                     </div>
                     
                     {pr.message && (
-                      <p className="text-[11px] font-mono italic mb-4 border-l pl-3 text-on-surface-variant border-[#1A1A1A]">
+                      <p className="text-[11px] font-mono italic mb-4 border-l pl-3 text-on-surface-variant border-outline-variant">
                         "{pr.message}"
                       </p>
                     )}
 
                     {pr.new_cards && pr.new_cards.length > 0 && (
-                      <div className="mt-4 mb-4 space-y-2 max-h-48 overflow-y-auto pr-2">
+                      <div className="mt-4 mb-4 space-y-2 max-h-[50vh] overflow-y-auto pr-2">
                         {pr.new_cards.map(card => {
                           const isSelected = selectedCardsMap[pr.pr_id]?.includes(card.card_id);
                           return (
-                            <label key={card.card_id} className={`flex items-start gap-3 p-3 rounded-md border cursor-pointer transition-colors ${
-                              isSelected ? "border-[var(--theme-primary)] bg-[var(--theme-primary)]/10" : "border-[#1A1A1A] bg-[#0c0c0c] hover:border-white/20" 
+                            <label key={card.card_id} className={`flex items-start gap-3 p-3 rounded-md cursor-pointer transition-colors ${
+                              isSelected ? "bg-primary/10" : "bg-surface-lowest hover:bg-surface-low/50" 
                             }`}>
                               <input 
                                 type="checkbox"
@@ -146,7 +146,7 @@ export function PullRequestModal({ deckId, onClose, onApproved }: PullRequestMod
                                 className="mt-1 flex-shrink-0"
                               />
                               <div className="flex-1 text-sm overflow-hidden">
-                                <div className="font-mono text-[11px] mb-1 text-white truncate">
+                                <div className="font-mono text-[11px] mb-1 text-on-surface truncate">
                                   {card.front_text}
                                 </div>
                                 <div className="text-[11px] font-sans text-on-surface-variant truncate">

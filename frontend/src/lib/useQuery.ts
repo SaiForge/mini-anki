@@ -1,17 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
 
 // Global cache to persist data across component unmounts
-const queryCache: Record<string, { data: any, timestamp: number }> = {};
-const CACHE_TTL = 1000 * 60 * 5; // 5 minutes
+export const queryCache: Record<string, { data: any, timestamp: number }> = {};
+const CACHE_TTL = 1000 * 60 * 5; // 5 minutes hard expiry
 
 export function useQuery<T>({
   queryKey,
   queryFn,
   enabled = true,
+  staleTime = 60_000, // 60s: don't refetch if cache is fresher than this
 }: {
   queryKey: any[];
   queryFn: () => Promise<T>;
   enabled?: boolean;
+  staleTime?: number; // ms before cached data is considered stale
 }) {
   const key = JSON.stringify(queryKey);
   
@@ -19,7 +21,7 @@ export function useQuery<T>({
   const [isLoading, setIsLoading] = useState<boolean>(!queryCache[key]?.data && enabled);
   
   const refetch = useCallback(async () => {
-    // Only set loading if we don't have data (stale-while-revalidate pattern)
+    // Show spinner only if we have no data at all
     if (!queryCache[key]?.data) {
       setIsLoading(true);
     }
@@ -41,15 +43,21 @@ export function useQuery<T>({
     
     const cached = queryCache[key];
     if (cached) {
+      // Always show cached data immediately (stale-while-revalidate)
       setData(cached.data);
-      // Background refetch always triggered to ensure fresh data on revisit, 
-      // matching the "whenever i revisit it fetches data" requirement
-      refetch();
+      
+      const age = Date.now() - cached.timestamp;
+      if (age > staleTime) {
+        // Data is stale — background refetch (no spinner since we already have data)
+        refetch();
+      }
+      // else: data is fresh — skip the network call entirely
     } else {
+      // No cache at all — fetch now (with spinner)
       refetch();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, enabled]); // We purposefully omit queryFn to prevent infinite loops if it's redefined inline
+  }, [key, enabled]); // Purposefully omit refetch/staleTime to prevent infinite loops
   
   return { data, isLoading, refetch };
 }

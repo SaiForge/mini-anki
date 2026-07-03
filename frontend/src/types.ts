@@ -37,6 +37,7 @@ export interface StudyDeck {
   originalDeckId?: string;
   hasChanges?: boolean;
   cards: Flashcard[];
+  prCount?: number;
 }
 
 export interface Flashcard {

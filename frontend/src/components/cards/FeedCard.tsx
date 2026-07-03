@@ -673,7 +673,7 @@ export function FeedCard({
                     } else if (item.isDeckCard) {
                       onToggleBookmark && onToggleBookmark(item.id);
                     } else {
-                      setShowSaveDialog && setShowSaveDialog(item.id);
+                      setShowSavePopover(true);
                     }
                   }}
                   className="flex items-center gap-2 text-on-surface-variant hover:text-white transition-colors group/btn cursor-pointer"

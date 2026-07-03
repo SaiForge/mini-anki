@@ -63,7 +63,7 @@ export default function Header({
   }, []);
 
   return (
-    <header className="sticky top-0 z-30 flex justify-between items-center w-full px-4 lg:px-8 h-20 bg-transparent pointer-events-none">
+    <header className={`sticky top-0 z-30 flex justify-between items-center w-full px-4 h-20 bg-transparent pointer-events-none ${activeTab === "explore" ? "lg:px-8" : "lg:px-[184px]"}`}>
       {/* Brand & Desktop Quick Filters */}
       <div className="flex items-center gap-8 flex-1 pointer-events-auto min-w-0">
         {activeTab === "feed" && feedSubTab && setFeedSubTab ? (

@@ -296,3 +296,20 @@ class DirectMessage(Base):
     # Relationships
     sender = relationship("User", foreign_keys=[sender_id])
     recipient = relationship("User", foreign_keys=[recipient_id])
+
+
+# ── Phase 6: AI Sessions ──────────────────────────────────────────────────
+
+class AISession(Base):
+    __tablename__ = "ai_sessions"
+
+    session_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
+    mode = Column(String(50), nullable=False)  # CHAT, GENERATE, EXTRACT_TEXT, UPLOAD_PDF, QUIZ
+    title = Column(String(200), nullable=True)
+    data = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", foreign_keys=[user_id])

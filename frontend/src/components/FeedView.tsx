@@ -1,7 +1,8 @@
-import { useState } from "react";
-import { Heart, Bookmark, MoreVertical, Plus, Terminal, Code, Sparkles, MessageSquare, FolderPlus, Check, X, Share2, UserPlus, UserCheck } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Terminal } from "lucide-react";
 import { FeedCard } from "./cards/FeedCard";
 import { FeedItem } from "../types";
+import { SkeletonFeed } from "./ui/SkeletonCard";
 
 interface FeedViewProps {
   items: FeedItem[];
@@ -23,6 +24,10 @@ interface FeedViewProps {
   currentUserId?: string;
   currentUsername?: string;
   onDeletePost?: (id: string) => void;
+  onLoadMore?: () => void;
+  hasMore?: boolean;
+  isLoadingMore?: boolean;
+  isInitialLoading?: boolean;
 }
 
 export default function FeedView({
@@ -44,18 +49,42 @@ export default function FeedView({
   isDarkMode = true,
   currentUserId,
   currentUsername,
-  onDeletePost
+  onDeletePost,
+  onLoadMore,
+  hasMore = false,
+  isLoadingMore = false,
+  isInitialLoading = false,
 }: FeedViewProps) {
   const [revealedItems, setRevealedItems] = useState<Record<string, boolean>>({});
   const [revealSteps, setRevealSteps] = useState<Record<string, number>>({});
-  const [activeSaveDeckItemId, setActiveSaveDeckItemId] = useState<string | null>(null);
+  const [savedFeedback, setSavedFeedback] = useState<Record<string, string>>({});
+  const [sharedFeedback, setSharedFeedback] = useState<Record<string, boolean>>({});
+
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!onLoadMore || !hasMore) return;
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
+          onLoadMore();
+        }
+      },
+      { rootMargin: "200px" }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [onLoadMore, hasMore, isLoadingMore]);
 
   const getCardMaxSteps = (item: FeedItem): number => {
     if (item.category === "JOKES") return 1;
     if (item.category === "RIDDLES") return 1;
     if (item.codeSnippet && item.title && item.content) return 2;
     if (item.title && item.content) return 1;
-    return 0; // single field of data
+    return 0;
   };
 
   const handleNextStep = (id: string, maxSteps: number) => {
@@ -67,9 +96,6 @@ export default function FeedView({
       return { ...prev, [id]: step + 1 };
     });
   };
-  const [savedFeedback, setSavedFeedback] = useState<Record<string, string>>({});
-  const [newDeckTitle, setNewDeckTitle] = useState<string>("");
-  const [sharedFeedback, setSharedFeedback] = useState<Record<string, boolean>>({});
 
   const filteredItems = items.filter((item) => {
     const matchesTab = !item.isPrivate;
@@ -82,38 +108,9 @@ export default function FeedView({
     return matchesTab && matchesSearch;
   });
 
-  const handleToggleReveal = (id: string) => {
-    setRevealedItems(prev => ({
-      ...prev,
-      [id]: !prev[id]
-    }));
-  };
-
-  const renderTags = (item: FeedItem, centered = false) => {
-    if (!item.tags || item.tags.length === 0) return null;
-    return (
-      <div
-        className={`flex flex-wrap gap-x-2 gap-y-1 pt-2.5 ${centered ? "justify-center" : "justify-start"}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {item.tags.map(tag => (
-          <button
-            key={tag}
-            type="button"
-            onClick={() => {
-              if (onSearchChange) {
-                onSearchChange(tag);
-              }
-            }}
-            className="text-[10px] font-mono lowercase text-zinc-500/60 hover:text-zinc-200 transition-colors bg-transparent border-0 p-0 m-0 outline-none cursor-pointer"
-            title={`Filter by tag #${tag}`}
-          >
-            #{tag}
-          </button>
-        ))}
-      </div>
-    );
-  };
+  if (isInitialLoading && filteredItems.length === 0) {
+    return <SkeletonFeed count={4} isDarkMode={isDarkMode} />;
+  }
 
   return (
     <div className="w-full max-w-[640px] mx-auto py-8 px-4 md:px-0 space-y-8 pb-32">
@@ -137,46 +134,60 @@ export default function FeedView({
           )}
         </div>
       ) : (
-        filteredItems.map((item) => {
-          const isSavedInAnyDeck = decks.some(deck => deck.cards?.some((c: any) => c.answer === item.content));
-          const maxSteps = getCardMaxSteps(item);
-          const currentStep = revealSteps[item.id] || 0;
-          const isSingle = maxSteps === 0;
-          const isFullyRevealed = isSingle || currentStep === maxSteps;
-          return (
-            <FeedCard
-              key={item.id}
-              isDarkMode={isDarkMode}
-              viewMode="feed"
-              feedItem={item}
-              isSingle={isSingle}
-              currentStep={currentStep}
-              maxSteps={maxSteps}
-              activeTab={activeTab}
-              savedFeedback={savedFeedback}
-              sharedFeedback={sharedFeedback}
-              onToggleReveal={() => !isSingle && handleNextStep(item.id, maxSteps)}
-              onViewProfile={onViewProfile}
-              onToggleFollow={onToggleFollow}
-              onToggleLike={onToggleLike}
-              onStudyDeck={onStudyDeck}
-              currentUserId={currentUserId}
-              currentUsername={currentUsername}
-              onDeletePost={onDeletePost}
-              onToggleBookmark={onToggleBookmark}
-              userDecks={decks}
-              onSaveCardToDeck={onSaveCardToDeck}
-              onRemoveCardFromDeck={onRemoveCardFromDeck}
-            />
-          );
-        })
-      )}
+        <>
+          {filteredItems.map((item) => {
+            const maxSteps = getCardMaxSteps(item);
+            const currentStep = revealSteps[item.id] || 0;
+            const isSingle = maxSteps === 0;
+            return (
+              <FeedCard
+                key={item.id}
+                isDarkMode={isDarkMode}
+                viewMode="feed"
+                feedItem={item}
+                isSingle={isSingle}
+                currentStep={currentStep}
+                maxSteps={maxSteps}
+                activeTab={activeTab}
+                savedFeedback={savedFeedback}
+                sharedFeedback={sharedFeedback}
+                onToggleReveal={() => !isSingle && handleNextStep(item.id, maxSteps)}
+                onViewProfile={onViewProfile}
+                onToggleFollow={onToggleFollow}
+                onToggleLike={onToggleLike}
+                onStudyDeck={onStudyDeck}
+                currentUserId={currentUserId}
+                currentUsername={currentUsername}
+                onDeletePost={onDeletePost}
+                onToggleBookmark={onToggleBookmark}
+                userDecks={decks}
+                onSaveCardToDeck={onSaveCardToDeck}
+                onRemoveCardFromDeck={onRemoveCardFromDeck}
+              />
+            );
+          })}
 
-      <div className="text-center pt-8">
-        <p className="text-[10px] font-mono text-on-surface-variant/20 tracking-wider">
-          --- END OF ACTIVE FEED ---
-        </p>
-      </div>
+          <div ref={sentinelRef} className="scroll-sentinel" aria-hidden="true" />
+
+          {isLoadingMore && (
+            <div className="flex justify-center py-4">
+              <div className="flex gap-1.5 items-center">
+                <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 animate-bounce" style={{ animationDelay: "0ms" }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 animate-bounce" style={{ animationDelay: "150ms" }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 animate-bounce" style={{ animationDelay: "300ms" }} />
+              </div>
+            </div>
+          )}
+
+          {!hasMore && !isLoadingMore && (
+            <div className="text-center pt-8">
+              <p className="text-[10px] font-mono text-on-surface-variant/20 tracking-wider">
+                --- END OF ACTIVE FEED ---
+              </p>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

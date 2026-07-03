@@ -19,6 +19,7 @@ export interface ApiDeck {
   original_deck_id?: string;
   has_changes?: boolean;
   due_count?: number;
+  pending_pr_count?: number;
 }
 
 export interface ApiCard {
@@ -107,6 +108,7 @@ export function mapApiDeckToStudyDeck(
     tags: meta.tags,
     originalDeckId: apiDeck.original_deck_id,
     hasChanges: apiDeck.has_changes,
+    prCount: apiDeck.pending_pr_count,
     cards: [], // Cards are loaded separately during study session
   };
 }

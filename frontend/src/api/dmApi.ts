@@ -57,3 +57,7 @@ export const updateMessage = async (messageId: string, body: string): Promise<Dm
   const res = await axiosClient.put(`/api/dm/message/${messageId}`, { body });
   return res.data;
 };
+
+export const deleteConversation = async (userId: string): Promise<void> => {
+  await axiosClient.delete(`/api/dm/conversation/${userId}`);
+};

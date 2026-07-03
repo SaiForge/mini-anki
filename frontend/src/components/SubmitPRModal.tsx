@@ -31,19 +31,19 @@ export function SubmitPRModal({ forkedDeckId, onClose, onSubmitted }: SubmitPRMo
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-[#0f0f11] border border-zinc-800 rounded-xl w-full max-w-md overflow-hidden shadow-2xl">
-        <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-[#141417]">
+      <div className="bg-surface-lowest border border-outline-variant rounded-xl w-full max-w-md overflow-hidden shadow-2xl">
+        <div className="flex items-center justify-between p-4 border-b border-outline-variant bg-surface-low/50">
           <div className="flex items-center gap-2">
-            <GitPullRequest className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-lg font-bold text-white tracking-wide">Submit Contribution</h2>
+            <GitPullRequest className="w-5 h-5 text-primary" />
+            <h2 className="text-lg font-bold text-on-surface tracking-wide">Submit Contribution</h2>
           </div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-white transition-colors">
+          <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
-          <p className="text-sm text-zinc-400">
+          <p className="text-sm text-on-surface-variant">
             Submit your new cards to the original deck owner. If approved, they will be merged into the public deck!
           </p>
           
@@ -54,11 +54,11 @@ export function SubmitPRModal({ forkedDeckId, onClose, onSubmitted }: SubmitPRMo
           )}
 
           <div>
-            <label className="block text-xs font-mono uppercase text-zinc-500 mb-1.5 ml-1">
+            <label className="block text-xs font-mono uppercase text-on-surface-variant mb-1.5 ml-1">
               Message (Optional)
             </label>
             <textarea
-              className="w-full bg-[#1A1A1A] border border-zinc-800 rounded-lg p-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500/50 resize-none h-24"
+              className="w-full bg-surface-low border border-outline-variant rounded-lg p-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/50 resize-none h-24"
               placeholder="Briefly describe what you added..."
               value={message}
               onChange={(e) => setMessage(e.target.value)}
@@ -72,7 +72,7 @@ export function SubmitPRModal({ forkedDeckId, onClose, onSubmitted }: SubmitPRMo
             <Button
               type="submit"
               disabled={submitting}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white"
+              className="bg-primary hover:bg-primary/90 text-on-primary border-none"
             >
               {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
               Submit PR

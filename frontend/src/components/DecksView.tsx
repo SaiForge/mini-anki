@@ -169,7 +169,7 @@ export default function DecksView({
               title="Submit changes to original deck"
             >
               <GitPullRequest className="w-4 h-4 mr-1.5" />
-              PRS
+              PRS {deck.prCount ? `(${deck.prCount})` : ""}
             </Button>
           ) : (deck.isPublic || publishStatus[deck.id]) ? (
             <Button
@@ -179,7 +179,7 @@ export default function DecksView({
               title="View Contributions"
             >
               <GitPullRequest className="w-4 h-4 mr-1.5" />
-              PRS
+              PRS {deck.prCount ? `(${deck.prCount})` : ""}
             </Button>
           ) : null}
 
@@ -341,7 +341,7 @@ export default function DecksView({
               </div>
             ))
           ) : customDecks.length === 0 ? (
-            <div className="p-12 text-center bg-[#0c0c0c] rounded-xl">
+            <div className="p-12 text-center">
               <p className="text-xs font-mono text-on-surface-variant/40 uppercase tracking-widest">No decks found. Create your first deck above.</p>
             </div>
           ) : customDecks.map(renderDeckRow)}
@@ -410,10 +410,10 @@ export default function DecksView({
       {/* Delete Confirmation Modal */}
       {confirmDeleteDeck && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-xl p-6 max-w-md w-full shadow-2xl">
-            <h3 className="text-xl font-bold text-white mb-2 font-sans tracking-tight">Delete Deck</h3>
+          <div className="bg-surface-lowest border border-outline-variant rounded-xl p-6 max-w-md w-full shadow-2xl">
+            <h3 className="text-xl font-bold text-on-surface mb-2 font-sans tracking-tight">Delete Deck</h3>
             <p className="text-sm text-on-surface-variant mb-6 leading-relaxed">
-              Are you sure you want to delete <span className="text-white font-semibold">{confirmDeleteDeck.title}</span>? This action cannot be undone and you will lose all cards in this deck.
+              Are you sure you want to delete <span className="text-on-surface font-semibold">{confirmDeleteDeck.title}</span>? This action cannot be undone and you will lose all cards in this deck.
             </p>
             <div className="flex justify-end gap-3">
               <Button variant="ghost" onClick={() => setConfirmDeleteDeck(null)} disabled={deletingId === confirmDeleteDeck.id}>

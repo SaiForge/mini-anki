@@ -228,6 +228,22 @@ def mark_thread_read(
     return {"message": "Thread marked as read"}
 
 
+@router.delete("/conversation/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_conversation(
+    user_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete all messages between current user and a specific user."""
+    db.query(DirectMessage).filter(
+        or_(
+            and_(DirectMessage.sender_id == current_user.user_id, DirectMessage.recipient_id == user_id),
+            and_(DirectMessage.sender_id == user_id, DirectMessage.recipient_id == current_user.user_id)
+        )
+    ).delete(synchronize_session=False)
+    db.commit()
+
+
 @router.delete("/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_message(
     message_id: uuid.UUID,

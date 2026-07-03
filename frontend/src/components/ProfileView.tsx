@@ -521,27 +521,27 @@ export default function ProfileView({ userEmail, currentUser, onProfileUpdate, s
               publicDecks.slice(0, displayLimit).map((deck) => (
                   <div 
                     key={deck.id}
-                    className="p-5 border border-[#1a1a1a] bg-zinc-950/20 rounded hover:border-zinc-800 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                    className="p-5 border border-outline-variant bg-surface-container-lowest rounded-xl hover:border-outline transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                   >
                     <div className="space-y-1.5">
                       <div className="flex items-center gap-2">
-                        <span className="text-[9px] font-mono border border-[#1A1A1A] text-zinc-400 px-1.5 py-0.5 rounded tracking-wide font-bold uppercase">
+                        <span className="text-[9px] font-mono border border-outline-variant text-on-surface-variant px-1.5 py-0.5 rounded tracking-wide font-bold uppercase">
                           {deck.category}
                         </span>
-                        <span className="text-[10px] font-mono text-zinc-500 uppercase">{deck.cardCount || deck.cards?.length || 0} cards</span>
+                        <span className="text-[10px] font-mono text-on-surface-variant uppercase">{deck.cardCount || deck.cards?.length || 0} cards</span>
                       </div>
-                      <h4 className="text-sm font-semibold font-sans text-white">{deck.title}</h4>
-                      <p className="text-xs text-zinc-400 font-light leading-relaxed font-sans">{deck.description}</p>
+                      <h4 className="text-sm font-semibold font-sans text-on-surface">{deck.title}</h4>
+                      <p className="text-xs text-on-surface-variant font-light leading-relaxed font-sans">{deck.description}</p>
                       
                       {deck.progress > 0 && (
                         <div className="pt-2 flex items-center gap-2 max-w-[200px]">
-                          <div className="h-1 bg-zinc-900 rounded-full flex-1 overflow-hidden">
+                          <div className="h-1 bg-surface rounded-full flex-1 overflow-hidden">
                             <div 
-                              className="h-full bg-white rounded-full"
+                              className="h-full bg-on-surface rounded-full"
                               style={{ width: `${deck.progress}%` }}
                             />
                           </div>
-                          <span className="text-[9px] font-mono text-zinc-500">{deck.progress}% mastery</span>
+                          <span className="text-[9px] font-mono text-on-surface-variant">{deck.progress}% mastery</span>
                         </div>
                       )}
                     </div>

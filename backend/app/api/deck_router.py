@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 import uuid
 from datetime import datetime, timezone
 from app.db.database import get_db
-from app.models.all_models import Deck, Card, Schedule, User
+from app.models.all_models import Deck, Card, Schedule, User, PullRequest
 from app.schemas.content_schema import (
     DeckCreate,
     DeckResponse,
@@ -84,6 +84,13 @@ def get_user_decks(
     
     total_due_count = sum(due_counts.values())
     
+    # 3. Batch pending PR counts
+    pr_counts = dict(
+        db.query(PullRequest.original_deck_id, func.count(PullRequest.pr_id))
+        .filter(PullRequest.original_deck_id.in_(deck_ids), PullRequest.status == "PENDING")
+        .group_by(PullRequest.original_deck_id).all()
+    )
+    
     for deck in decks:
         if deck.is_default:
             deck.card_count = total_due_count
@@ -98,6 +105,8 @@ def get_user_decks(
             fork_cards = db.query(Card.front_text, Card.back_text).filter(Card.deck_id == deck.deck_id).all()
             orig_cards = db.query(Card.front_text, Card.back_text).filter(Card.deck_id == deck.original_deck_id).all()
             deck.has_changes = len(set(fork_cards) - set(orig_cards)) > 0
+            
+        deck.pending_pr_count = pr_counts.get(deck.deck_id, 0)
 
     return decks
 
@@ -198,34 +207,6 @@ def create_card(
     db.commit()
     db.refresh(new_card)
     return new_card
-
-
-@router.post("/{deck_id}/publish", status_code=status.HTTP_200_OK)
-def publish_deck(
-    deck_id: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    deck = db.query(Deck).filter(Deck.deck_id == deck_id, Deck.user_id == current_user.user_id).first()
-    if not deck:
-        raise HTTPException(status_code=404, detail="Deck not found")
-    deck.is_public = True
-    db.commit()
-    return {"message": "Deck published"}
-
-
-@router.post("/{deck_id}/unpublish", status_code=status.HTTP_200_OK)
-def unpublish_deck(
-    deck_id: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    deck = db.query(Deck).filter(Deck.deck_id == deck_id, Deck.user_id == current_user.user_id).first()
-    if not deck:
-        raise HTTPException(status_code=404, detail="Deck not found")
-    deck.is_public = False
-    db.commit()
-    return {"message": "Deck unpublished"}
 
 
 @router.delete("/{deck_id}/cards/{card_id}", status_code=status.HTTP_204_NO_CONTENT)

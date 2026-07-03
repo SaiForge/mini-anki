@@ -56,7 +56,9 @@ function CommentNode({
   };
 
   const ago = (dateStr: string) => {
-    const diff = Date.now() - new Date(dateStr).getTime();
+    const isUTC = dateStr.endsWith('Z') || dateStr.includes('+');
+    const parsedTime = new Date(isUTC ? dateStr : dateStr + 'Z').getTime();
+    const diff = Date.now() - parsedTime;
     const m = Math.floor(diff / 60000);
     if (m < 1) return "just now";
     if (m < 60) return `${m}m ago`;
@@ -194,7 +196,7 @@ export default function CommentThread({
       } else {
         newC = await addComment(postId, commentText.trim());
       }
-      setComments(prev => [...prev, newC]);
+      setComments(prev => [newC, ...prev]);
       setCount(v => v + 1);
       setCommentText("");
     } catch (err) {

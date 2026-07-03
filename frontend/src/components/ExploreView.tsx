@@ -3,6 +3,7 @@ import { FeedCard } from "./cards/FeedCard";
 import { browseDecks, getTrendingDecks, searchAll, forkDeck, likeDeck, unlikeDeck, PublicDeck } from "../api/exploreApi";
 import { Heart, GitFork, Layers, BookOpen, Terminal } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { queryCache } from "../lib/useQuery";
 
 interface ExploreViewProps {
   onStudyDeck: (deckName: string, deckId?: string) => void;
@@ -34,9 +35,14 @@ export default function ExploreView({
   currentUsername,
 }: ExploreViewProps) {
   const [activeCategory, setActiveCategory] = useState<string>("Trending");
-  const [liveDecks, setLiveDecks] = useState<PublicDeck[]>([]);
-  const [liveUsers, setLiveUsers] = useState<any[]>([]);
-  const [liveLoading, setLiveLoading] = useState(false);
+
+  const liveDecksCacheKey = JSON.stringify(['exploreDecks', searchQuery, activeCategory]);
+  const initialLiveDecks = queryCache[liveDecksCacheKey]?.data?.decks || [];
+  const initialLiveUsers = queryCache[liveDecksCacheKey]?.data?.users || [];
+
+  const [liveDecks, setLiveDecks] = useState<PublicDeck[]>(initialLiveDecks);
+  const [liveUsers, setLiveUsers] = useState<any[]>(initialLiveUsers);
+  const [liveLoading, setLiveLoading] = useState(!initialLiveDecks.length);
   const [liveError, setLiveError] = useState<string | null>(null);
   const [forkStatus, setForkStatus] = useState<Record<string, "idle" | "loading" | "done">>({});
   const [likeStatus, setLikeStatus] = useState<Record<string, boolean>>({});
@@ -44,43 +50,58 @@ export default function ExploreView({
   const [activeExploreTab, setActiveExploreTab] = useState<"decks" | "cards">("decks");
 
   // Explore Cards state
-  const [exploreCards, setExploreCards] = useState<any[]>([]);
-  const [cardsLoading, setCardsLoading] = useState(false);
+  const cardsCacheKey = JSON.stringify(['exploreCards']);
+  const initialExploreCards = queryCache[cardsCacheKey]?.data || [];
+
+  const [exploreCards, setExploreCards] = useState<any[]>(initialExploreCards);
+  const [cardsLoading, setCardsLoading] = useState(!initialExploreCards.length);
   const [cardsHasMore, setCardsHasMore] = useState(true);
   const [cardsPage, setCardsPage] = useState(0);
 
   // Fetch live public decks from backend
   const loadLiveDecks = useCallback(async () => {
-    setLiveLoading(true);
+    if (!queryCache[liveDecksCacheKey]?.data) {
+      setLiveLoading(true);
+    }
     setLiveError(null);
     try {
+      let results;
       if (searchQuery && searchQuery.length >= 2) {
-        const results = await searchAll(searchQuery, 20);
-        setLiveDecks(results.decks);
-        setLiveUsers(results.users || []);
+        const res = await searchAll(searchQuery, 20);
+        results = { decks: res.decks, users: res.users || [] };
       } else if (activeCategory === "Trending") {
         const trending = await getTrendingDecks(12);
-        setLiveDecks(trending);
+        results = { decks: trending, users: [] };
       } else {
         const res = await browseDecks({ category: activeCategory, limit: 20 });
-        setLiveDecks(res.items);
+        results = { decks: res.items, users: [] };
       }
+      queryCache[liveDecksCacheKey] = { data: results, timestamp: Date.now() };
+      setLiveDecks(results.decks);
+      setLiveUsers(results.users);
     } catch (e: any) {
       console.error("[ExploreView] Could not load live decks:", e);
       setLiveError(e?.response?.data?.detail || e?.message || "Failed to load decks");
     } finally {
       setLiveLoading(false);
     }
-  }, [searchQuery, activeCategory]);
+  }, [searchQuery, activeCategory, liveDecksCacheKey]);
 
   const loadExploreCards = useCallback(async (pageNum: number) => {
     if (cardsLoading || (!cardsHasMore && pageNum > 0)) return;
-    setCardsLoading(true);
+    
+    if (pageNum === 0 && !queryCache[cardsCacheKey]?.data) {
+      setCardsLoading(true);
+    } else if (pageNum > 0) {
+      setCardsLoading(true);
+    }
+    
     try {
       const { getExploreCards } = await import("../api/exploreApi");
       const limit = 20;
       const res = await getExploreCards(pageNum * limit, limit);
       if (pageNum === 0) {
+        queryCache[cardsCacheKey] = { data: res.items, timestamp: Date.now() };
         setExploreCards(res.items);
       } else {
         setExploreCards(prev => [...prev, ...res.items]);
@@ -92,7 +113,7 @@ export default function ExploreView({
     } finally {
       setCardsLoading(false);
     }
-  }, [cardsLoading, cardsHasMore]);
+  }, [cardsLoading, cardsHasMore, cardsCacheKey]);
 
   useEffect(() => {
     loadLiveDecks();
@@ -116,6 +137,7 @@ export default function ExploreView({
     try {
       await forkDeck(deckId);
       setForkStatus(prev => ({ ...prev, [deckId]: "done" }));
+      window.dispatchEvent(new Event("refreshDecks"));
     } catch (e) {
       console.error("Fork failed", e);
       setForkStatus(prev => ({ ...prev, [deckId]: "idle" }));
@@ -247,6 +269,7 @@ export default function ExploreView({
                       onSaveCardToDeck={(id, deckId) => onSaveCardToDeck(item.title || "", item.content, deckId)}
                       onRemoveCardFromDeck={(id, deckId) => onRemoveCardFromDeck(item.title || "", item.content, deckId)}
                       onToggleFollow={onToggleFollow}
+                      onForkDeck={(deckId) => handleForkDeck(deckId)}
                       isDarkMode={isDarkMode}
                       currentUserId={currentUserId}
                       currentUsername={currentUsername}
@@ -473,6 +496,7 @@ export default function ExploreView({
                     onSaveCardToDeck={(id, deckId) => onSaveCardToDeck(item.title || "", item.content, deckId)}
                     onRemoveCardFromDeck={(id, deckId) => onRemoveCardFromDeck(item.title || "", item.content, deckId)}
                     onToggleFollow={onToggleFollow}
+                    onForkDeck={(deckId) => handleForkDeck(deckId)}
                     isDarkMode={isDarkMode}
                     currentUserId={currentUserId}
                     currentUsername={currentUsername}

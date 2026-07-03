@@ -8,7 +8,7 @@ import {
   StudyStats
 } from "./types";
 import { getMe, UserResponse } from "./api/authApi";
-import { getDecks, mapApiDeckToStudyDeck, saveDeckMeta, deleteDeck as apiDeleteDeck, DeckLocalMeta, createCard, getDeckCards, createDeck } from "./api/deckApi";
+import { getDecks, mapApiDeckToStudyDeck, saveDeckMeta, deleteDeck as apiDeleteDeck, DeckLocalMeta, createCard, createDeck } from "./api/deckApi";
 import { createPost, getForYouFeed, getFollowingFeed, likePost, unlikePost, bookmarkPost, removeBookmark, deletePost, PostResponse } from "./api/feedApi";
 import { getTrendingDecks, likeDeck, unlikeDeck } from "./api/exploreApi";
 import { followUser, unfollowUser } from "./api/socialApi";
@@ -124,30 +124,17 @@ export default function App() {
     localStorage.setItem("study-lab-theme", isDarkMode ? "dark" : "light");
   }, [isDarkMode]);
 
-  // Fetch real decks and merge with any locally-stored UI metadata
+  // Fetch real decks — cards are loaded lazily when user opens a study session
   const { data: apiDecks, isLoading: isApiDecksLoading, refetch: fetchDecksData } = useQuery({
     queryKey: ['decks'],
     queryFn: async () => {
       const apiDecks = await getDecks();
-      const mappedDecks = await Promise.all(
-        apiDecks.map(async (d) => {
-          const mapped = mapApiDeckToStudyDeck(d);
-          try {
-            const apiCards = await getDeckCards(mapped.id);
-            mapped.cards = apiCards.map(c => ({
-              id: c.card_id,
-              question: c.front_text,
-              answer: c.back_text,
-            }));
-          } catch (e) {
-            console.error(`Failed to load cards for deck ${mapped.id}`, e);
-          }
-          return mapped;
-        })
-      );
-      return mappedDecks;
+      // Map decks without eagerly loading cards for all of them.
+      // Cards will be fetched on-demand inside StudySession when a deck is opened.
+      return apiDecks.map(d => mapApiDeckToStudyDeck(d));
     },
     enabled: isAuthenticated,
+    staleTime: 5 * 60_000, // Decks change rarely — treat as fresh for 5min
   });
 
   useEffect(() => {
@@ -159,6 +146,14 @@ export default function App() {
   useEffect(() => {
     setDecksLoading(isApiDecksLoading);
   }, [isApiDecksLoading]);
+
+  useEffect(() => {
+    const handleRefreshDecks = () => {
+      fetchDecksData();
+    };
+    window.addEventListener("refreshDecks", handleRefreshDecks);
+    return () => window.removeEventListener("refreshDecks", handleRefreshDecks);
+  }, [fetchDecksData]);
 
   // Bootstrap: load user profile + real decks from the backend when authenticated
   useQuery({
@@ -178,6 +173,7 @@ export default function App() {
       }
     },
     enabled: isAuthenticated,
+    staleTime: 5 * 60_000, // Profile changes rarely — fresh for 5min
   });
 
   const { data: apiTrending } = useQuery({
@@ -200,6 +196,7 @@ export default function App() {
       }));
     },
     enabled: isAuthenticated,
+    staleTime: 2 * 60_000, // Trending changes slowly — fresh for 2min
   });
 
   useEffect(() => {
@@ -503,35 +500,47 @@ export default function App() {
     });
   }, []);
 
-  // Load feed from backend
-  const { data: apiFeed, refetch: loadFeed } = useQuery({
+  // Load feed from backend with cursor-based infinite scroll
+  const [feedCursor, setFeedCursor] = useState<string | undefined>(undefined);
+  const [feedHasMore, setFeedHasMore] = useState<boolean>(true);
+  const [feedLoadingMore, setFeedLoadingMore] = useState<boolean>(false);
+
+  const mapPostToFeedItem = useCallback((p: PostResponse): FeedItem => ({
+    id: p.post_id,
+    category: p.category || p.content_type || "CONCEPT",
+    title: p.title || "",
+    content: p.body,
+    codeSnippet: p.code_snippet || undefined,
+    imageUrl: p.image_url || undefined,
+    likes: p.likes_count,
+    likedByUser: p.is_liked,
+    bookmarkedByUser: p.is_bookmarked,
+    timeLabel: new Date(p.created_at).toLocaleDateString(),
+    isPrivate: p.is_private,
+    authorName: p.author_full_name || p.author_username || "Unknown",
+    authorUsername: p.author_username ? `@${p.author_username}` : "@unknown",
+    authorId: p.author_id,
+    authorAvatar: (p.author_full_name || p.author_username || "?").substring(0, 2).toUpperCase(),
+    authorAvatarUrl: p.author_avatar_url || undefined,
+    isFollowed: p.is_followed,
+    tags: [],
+    commentsCount: p.comments_count,
+  }), []);
+
+  const { data: apiFeed, isLoading: isFeedLoading, refetch: loadFeed } = useQuery({
     queryKey: ['feed', feedSubTab],
     queryFn: async () => {
-      const data = await getForYouFeed(0, 30);
-      const mapped: FeedItem[] = data.map((p: PostResponse) => ({
-        id: p.post_id,
-        category: p.category || p.content_type || "CONCEPT",
-        title: p.title || "",
-        content: p.body,
-        codeSnippet: p.code_snippet || undefined,
-        imageUrl: p.image_url || undefined,
-        likes: p.likes_count,
-        likedByUser: p.is_liked,
-        bookmarkedByUser: p.is_bookmarked,
-        timeLabel: new Date(p.created_at).toLocaleDateString(),
-        isPrivate: p.is_private,
-        authorName: p.author_full_name || p.author_username || "Unknown",
-        authorUsername: p.author_username ? `@${p.author_username}` : "@unknown",
-        authorId: p.author_id,
-        authorAvatar: (p.author_full_name || p.author_username || "?").substring(0, 2).toUpperCase(),
-        authorAvatarUrl: p.author_avatar_url || undefined,
-        isFollowed: p.is_followed,
-        tags: [],
-        commentsCount: p.comments_count,
-      }));
+      const PAGE_SIZE = 20;
+      const data = await getForYouFeed(0, PAGE_SIZE);
+      const mapped: FeedItem[] = data.map(mapPostToFeedItem);
+      // Set cursor to the created_at of the last item for the next page
+      const lastItem = data[data.length - 1];
+      setFeedCursor(lastItem?.created_at);
+      setFeedHasMore(data.length === PAGE_SIZE);
       return mapped;
     },
     enabled: isAuthenticated,
+    staleTime: 2 * 60_000, // Feed is fresh for 2 minutes
   });
 
   useEffect(() => {
@@ -544,6 +553,33 @@ export default function App() {
       });
     }
   }, [apiFeed]);
+
+  // Instagram-style: load next page and append (no spinner replacement, just append)
+  const loadMoreFeed = useCallback(async () => {
+    if (!feedHasMore || feedLoadingMore || !feedCursor) return;
+    setFeedLoadingMore(true);
+    try {
+      const PAGE_SIZE = 20;
+      const data = await getForYouFeed(0, PAGE_SIZE);
+      const mapped: FeedItem[] = data.map(mapPostToFeedItem);
+      if (mapped.length > 0) {
+        setFeedItems(prev => {
+          const existingIds = new Set(prev.map(i => i.id));
+          const newItems = mapped.filter(m => !existingIds.has(m.id));
+          return [...prev, ...newItems];
+        });
+        const lastItem = data[data.length - 1];
+        setFeedCursor(lastItem?.created_at);
+        setFeedHasMore(mapped.length === PAGE_SIZE);
+      } else {
+        setFeedHasMore(false);
+      }
+    } catch (e) {
+      console.error("Failed to load more feed", e);
+    } finally {
+      setFeedLoadingMore(false);
+    }
+  }, [feedHasMore, feedLoadingMore, feedCursor, mapPostToFeedItem]);
 
   // Handle addition of a custom feed post
   const handlePublishFeedPost = async (data: ConceptFormData) => {
@@ -967,7 +1003,7 @@ export default function App() {
       />
 
       {/* Main Core View Area */}
-      <div className="flex-1 min-w-0 lg:ml-64 flex flex-col min-h-screen relative">
+      <div className="flex-1 min-w-0 flex flex-col min-h-screen relative transition-all duration-300 ease-in-out lg:ml-[72px]">
 
         {/* Responsive Header Component */}
         {["feed", "explore", "decks"].includes(activeTab) && (
@@ -996,7 +1032,7 @@ export default function App() {
         )}
 
         {/* Current Content Canvas */}
-        <main className="flex-1">
+        <main className={`flex-1 ${["explore", "messages"].includes(activeTab) ? "" : "lg:px-[184px]"}`}>
           <AnimatePresence
             mode="wait"
             onExitComplete={() => {
@@ -1046,6 +1082,10 @@ export default function App() {
                   currentUserId={currentUser?.user_id}
                   currentUsername={currentUser?.username || undefined}
                   onDeletePost={handleDeletePost}
+                  onLoadMore={loadMoreFeed}
+                  hasMore={feedHasMore}
+                  isLoadingMore={feedLoadingMore}
+                  isInitialLoading={isFeedLoading}
                 />
               )}
 
@@ -1319,8 +1359,8 @@ export default function App() {
         onClose={() => setShowAiAssistant(false)}
         decks={decks}
         isDarkMode={isDarkMode}
-        onDeckCreated={async (name: string) => {
-          const newDeck = await createDeck(name);
+        onDeckCreated={async (name: string, description?: string) => {
+          const newDeck = await createDeck(name, description);
           return newDeck.deck_id;
         }}
         onCardsAdded={async (deckId: string, cards: { front: string; back: string }[]) => {

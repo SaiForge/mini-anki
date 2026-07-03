@@ -31,6 +31,8 @@ else:
                 pool_pre_ping=True,       # test connections before handing them out
                 pool_size=5,
                 max_overflow=10,
+                pool_recycle=1800,        # recycle connections every 30min (prevents stale sockets)
+                pool_timeout=30,          # raise error after 30s waiting for a connection
             )
             # Eagerly verify the connection works
             with engine.connect() as conn:

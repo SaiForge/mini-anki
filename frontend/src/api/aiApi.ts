@@ -62,3 +62,39 @@ export const extractCardsFromPdf = async (file: File, count = 15): Promise<AICar
   });
   return res.data.cards;
 };
+
+// ─── AI Sessions ───────────────────────────────────────────────────────────
+
+export interface AISession {
+  session_id: string;
+  user_id: string;
+  mode: "CHAT" | "GENERATE" | "EXTRACT_TEXT" | "UPLOAD_PDF" | "QUIZ";
+  title?: string;
+  data: any;
+  created_at: string;
+  updated_at: string;
+}
+
+export const getAiSessions = async (): Promise<AISession[]> => {
+  const res = await axiosClient.get("/api/ai/sessions");
+  return res.data;
+};
+
+export const getAiSession = async (sessionId: string): Promise<AISession> => {
+  const res = await axiosClient.get(`/api/ai/sessions/${sessionId}`);
+  return res.data;
+};
+
+export const createAiSession = async (mode: string, title?: string, data?: any): Promise<AISession> => {
+  const res = await axiosClient.post("/api/ai/sessions", { mode, title, data });
+  return res.data;
+};
+
+export const updateAiSession = async (sessionId: string, title?: string, data?: any): Promise<AISession> => {
+  const res = await axiosClient.put(`/api/ai/sessions/${sessionId}`, { title, data });
+  return res.data;
+};
+
+export const deleteAiSession = async (sessionId: string): Promise<void> => {
+  await axiosClient.delete(`/api/ai/sessions/${sessionId}`);
+};

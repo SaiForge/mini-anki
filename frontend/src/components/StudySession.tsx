@@ -88,7 +88,6 @@ export default function StudySession({
         .then(dueCards => {
           setApiCards(dueCards.map(mapDueCardToFlashcard));
           if (dueCards.length === 0) {
-            setIsBrowsing(true);
             if (onSessionComplete) onSessionComplete(deckId);
           }
         })
@@ -318,6 +317,7 @@ export default function StudySession({
         try {
           // Actually fork the deck on the backend
           const forkedApiDeck = await forkDeck(deckId);
+          window.dispatchEvent(new Event("refreshDecks"));
 
           // The forkDeck API currently returns PublicDeck structure, which is very similar to ApiDeck.
           // mapApiDeckToStudyDeck handles formatting.

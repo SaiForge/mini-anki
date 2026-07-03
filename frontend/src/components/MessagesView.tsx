@@ -3,10 +3,11 @@ import {
   MessageSquare, Send, ArrowLeft, Trash2, Loader2, Pencil, Check, X, Search, Sparkles
 } from "lucide-react";
 import {
-  listConversations, getThread, sendMessage, markThreadRead, deleteMessage, updateMessage,
+  listConversations, getThread, sendMessage, markThreadRead, deleteMessage, updateMessage, deleteConversation,
   DmConversation, DmMessage
 } from "../api/dmApi";
 import { resolveMediaUrl } from "../api/uploadApi";
+import { queryCache } from "../lib/useQuery";
 import { motion, AnimatePresence } from "motion/react";
 
 interface MessagesViewProps {
@@ -144,18 +145,26 @@ function Avatar({
 }
 
 export default function MessagesView({ currentUserId, searchQuery, isDarkMode = true, onOpenUserProfile, targetUser, onClearTargetUser, onOpenPost }: MessagesViewProps) {
-  const [conversations, setConversations] = useState<DmConversation[]>([]);
+  const cacheKey = JSON.stringify(['conversations', currentUserId]);
+  const initialConvs = queryCache[cacheKey]?.data || [];
+
+  const [conversations, setConversations] = useState<DmConversation[]>(initialConvs);
   const [selectedConv, setSelectedConv] = useState<DmConversation | null>(null);
   const [messages, setMessages] = useState<DmMessage[]>([]);
   const [localSearchQuery, setLocalSearchQuery] = useState("");
   const [showLocalSearch, setShowLocalSearch] = useState(false);
   const [inputText, setInputText] = useState("");
   const [sending, setSending] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialConvs.length);
   const [msgLoading, setMsgLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [editSaving, setEditSaving] = useState(false);
+  
+  // Long press state
+  const [longPressConv, setLongPressConv] = useState<string | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
@@ -165,11 +174,52 @@ export default function MessagesView({ currentUserId, searchQuery, isDarkMode = 
     selectedConvRef.current = selectedConv;
   }, [selectedConv]);
 
+  const handlePointerDown = (convId: string) => {
+    longPressTimer.current = setTimeout(() => {
+      setLongPressConv(convId);
+    }, 500); // 500ms tap and hold
+  };
 
+  const handlePointerUpOrLeave = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const handleDeleteConv = async (convId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await deleteConversation(convId);
+      setConversations(prev => prev.filter(c => c.partner_id !== convId));
+      if (selectedConv?.partner_id === convId) {
+        setSelectedConv(null);
+      }
+      setLongPressConv(null);
+    } catch (err) {
+      console.warn("Failed to delete conversation", err);
+    }
+  };
+
+  const handleMarkAsReadConv = async (convId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await markThreadRead(convId);
+      setConversations(prev => prev.map(c => c.partner_id === convId ? { ...c, unread_count: 0 } : c));
+      setLongPressConv(null);
+      window.dispatchEvent(new CustomEvent('fetch_unread_counts'));
+    } catch (err) {
+      console.warn("Failed to mark as read", err);
+    }
+  };
 
   const loadConversations = useCallback(async () => {
+    if (!queryCache[cacheKey]?.data) {
+      setLoading(true);
+    }
     try {
       const data = await listConversations();
+      queryCache[cacheKey] = { data, timestamp: Date.now() };
       setConversations(data);
       return data;
     } catch (e) {
@@ -178,7 +228,7 @@ export default function MessagesView({ currentUserId, searchQuery, isDarkMode = 
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [cacheKey]);
 
   useEffect(() => { loadConversations(); }, [loadConversations]);
 
@@ -392,9 +442,9 @@ export default function MessagesView({ currentUserId, searchQuery, isDarkMode = 
   );
 
   // Theme tokens
-  const bg = isDarkMode ? "bg-[#080808]" : "bg-[#fdfbfb]";
+  const bg = isDarkMode ? "bg-black" : "bg-[#fdfbfb]";
   const border = isDarkMode ? "border-white/[0.07]" : "border-[#c9ada7]/30";
-  const panelBg = isDarkMode ? "bg-[#0c0c0c]/80 backdrop-blur-xl" : "bg-[#fdfbfb]/80 backdrop-blur-xl";
+  const panelBg = isDarkMode ? "bg-black" : "bg-[#fdfbfb]";
   const textPrimary = isDarkMode ? "text-zinc-100" : "text-[#22223b]";
   const textSecondary = isDarkMode ? "text-zinc-500" : "text-[#4a4e69]";
   const textMuted = isDarkMode ? "text-zinc-700" : "text-[#9a8c98]";
@@ -490,32 +540,71 @@ export default function MessagesView({ currentUserId, searchQuery, isDarkMode = 
             ) : (
               <div className="p-2 space-y-0.5">
                 {filteredConvs.map(conv => (
-                  <button
-                    key={conv.partner_id}
-                    onClick={() => openThread(conv)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all cursor-pointer ${hoverBg} ${selectedConv?.partner_id === conv.partner_id ? `${activeBg} border-l-2 ${activeAccent} pl-3.5` : ""
-                      }`}
-                  >
-                    <Avatar url={conv.partner_avatar_url} name={conv.partner_full_name || conv.partner_username} isDarkMode={isDarkMode} />
-                    <div className="flex-1 min-w-0 pr-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className={`text-[13px] font-semibold truncate ${conv.unread_count > 0 ? textPrimary : textSecondary}`}>
-                          {conv.partner_full_name || conv.partner_username || "Anonymous"}
-                        </span>
-                        <span className={`text-[9px] font-mono ${textMuted} flex-shrink-0`}>{timeAgo(conv.last_message_at)}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-2 mt-0.5">
-                        <p className={`text-[11px] truncate ${conv.unread_count > 0 ? textSecondary : textMuted}`}>
-                          {conv.is_mine ? "You: " : ""}{conv.last_message}
-                        </p>
-                        {conv.unread_count > 0 && (
-                          <span className={`flex-shrink-0 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center ${isDarkMode ? "bg-white text-black" : "bg-[#22223b] text-[#f2e9e4]"}`}>
-                            {conv.unread_count > 9 ? "9+" : conv.unread_count}
+                  <div key={conv.partner_id} className="relative">
+                    <button
+                      onClick={() => openThread(conv)}
+                      onPointerDown={() => handlePointerDown(conv.partner_id)}
+                      onPointerUp={handlePointerUpOrLeave}
+                      onPointerLeave={handlePointerUpOrLeave}
+                      onContextMenu={(e) => { e.preventDefault(); setLongPressConv(conv.partner_id); }}
+                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all cursor-pointer select-none ${hoverBg} ${selectedConv?.partner_id === conv.partner_id ? `${activeBg} border-l-2 ${activeAccent} pl-3.5` : ""
+                        }`}
+                    >
+                      <Avatar url={conv.partner_avatar_url} name={conv.partner_full_name || conv.partner_username} isDarkMode={isDarkMode} />
+                      <div className="flex-1 min-w-0 pr-2 pointer-events-none">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`text-[13px] font-semibold truncate ${conv.unread_count > 0 ? textPrimary : textSecondary}`}>
+                            {conv.partner_full_name || conv.partner_username || "Anonymous"}
                           </span>
-                        )}
+                          <span className={`text-[9px] font-mono ${textMuted} flex-shrink-0`}>{timeAgo(conv.last_message_at)}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 mt-0.5">
+                          <p className={`text-[11px] truncate ${conv.unread_count > 0 ? textSecondary : textMuted}`}>
+                            {conv.is_mine ? "You: " : ""}{conv.last_message}
+                          </p>
+                          {conv.unread_count > 0 && (
+                            <span className={`flex-shrink-0 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center ${isDarkMode ? "bg-white text-black" : "bg-[#22223b] text-[#f2e9e4]"}`}>
+                              {conv.unread_count > 9 ? "9+" : conv.unread_count}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </button>
+                    </button>
+                    {/* Context Menu for long press / right click */}
+                    <AnimatePresence>
+                      {longPressConv === conv.partner_id && (
+                        <>
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-40"
+                            onClick={(e) => { e.stopPropagation(); setLongPressConv(null); }}
+                          />
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className={`absolute z-50 left-16 top-10 w-40 rounded-xl shadow-xl overflow-hidden border ${isDarkMode ? "bg-[#111] border-white/10" : "bg-white border-zinc-200"}`}
+                          >
+                            <button
+                              onClick={(e) => handleMarkAsReadConv(conv.partner_id, e)}
+                              className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs transition-colors cursor-pointer ${isDarkMode ? "text-zinc-200 hover:bg-white/10" : "text-zinc-700 hover:bg-zinc-100"}`}
+                            >
+                              <Check className="w-3.5 h-3.5" /> Mark as Read
+                            </button>
+                            <div className={`h-px w-full ${isDarkMode ? "bg-white/10" : "bg-zinc-200"}`} />
+                            <button
+                              onClick={(e) => handleDeleteConv(conv.partner_id, e)}
+                              className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs transition-colors cursor-pointer text-red-500 hover:bg-red-500/10`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" /> Delete Chat
+                            </button>
+                          </motion.div>
+                        </>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 ))}
               </div>
             )}
@@ -564,8 +653,11 @@ export default function MessagesView({ currentUserId, searchQuery, isDarkMode = 
                   >
                     <Avatar url={selectedConv.partner_avatar_url} name={selectedConv.partner_full_name || selectedConv.partner_username} size="md" isDarkMode={isDarkMode} />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-[13px] font-semibold ${textPrimary} truncate`}>
+                  <div 
+                    className="flex-1 min-w-0 cursor-pointer"
+                    onClick={() => selectedConv.partner_username && onOpenUserProfile?.(selectedConv.partner_username)}
+                  >
+                    <p className={`text-[13px] font-semibold ${textPrimary} truncate hover:underline underline-offset-2`}>
                       {selectedConv.partner_full_name || selectedConv.partner_username}
                     </p>
                     <p className={`text-[10px] font-mono ${textMuted}`}>@{selectedConv.partner_username}</p>

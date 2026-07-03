@@ -14,7 +14,8 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from typing import Optional, List
 
-from app.models.all_models import User
+from app.models.all_models import User, AISession
+from app.schemas.ai_session_schema import AISessionCreate, AISessionUpdate, AISessionResponse
 from app.api.deps import get_current_user
 from app.services.ai_service import AIService
 from app.db.database import get_db
@@ -440,4 +441,81 @@ def generate_flashcards(
         ]
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+# ─── AI Sessions CRUD ─────────────────────────────────────────────────────────
+
+@router.get("/sessions", response_model=List[AISessionResponse])
+def get_sessions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List all AI sessions for current user."""
+    sessions = db.query(AISession).filter(AISession.user_id == current_user.user_id).order_by(AISession.updated_at.desc()).all()
+    return sessions
+
+@router.post("/sessions", response_model=AISessionResponse)
+def create_session(
+    session_in: AISessionCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create a new AI session."""
+    db_session = AISession(
+        user_id=current_user.user_id,
+        mode=session_in.mode,
+        title=session_in.title,
+        data=session_in.data
+    )
+    db.add(db_session)
+    db.commit()
+    db.refresh(db_session)
+    return db_session
+
+@router.get("/sessions/{session_id}", response_model=AISessionResponse)
+def get_session(
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get a specific AI session."""
+    session = db.query(AISession).filter(AISession.session_id == session_id, AISession.user_id == current_user.user_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session
+
+@router.put("/sessions/{session_id}", response_model=AISessionResponse)
+def update_session(
+    session_id: str,
+    session_in: AISessionUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Update an AI session."""
+    session = db.query(AISession).filter(AISession.session_id == session_id, AISession.user_id == current_user.user_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    if session_in.title is not None:
+        session.title = session_in.title
+    if session_in.data is not None:
+        session.data = session_in.data
+        
+    db.commit()
+    db.refresh(session)
+    return session
+
+@router.delete("/sessions/{session_id}")
+def delete_session(
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete an AI session."""
+    session = db.query(AISession).filter(AISession.session_id == session_id, AISession.user_id == current_user.user_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    db.delete(session)
+    db.commit()
+    return {"message": "Session deleted"}
 

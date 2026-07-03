@@ -28,6 +28,7 @@ class DeckResponse(BaseModel):
     original_deck_id: UUID | None = None
     has_changes: bool = False
     due_count: int = 0
+    pending_pr_count: int = 0
 
     class Config:
         from_attributes = True

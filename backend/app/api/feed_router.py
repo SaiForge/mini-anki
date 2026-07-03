@@ -182,7 +182,7 @@ def get_for_you_feed(
     posts = FeedService.get_for_you_feed(db, current_user.user_id, cursor, limit)
     result = _serialize_posts_batched(posts, current_user.user_id, db)
     
-    set_cache_sync(cache_key, result, expire_seconds=60)
+    set_cache_sync(cache_key, result, expire_seconds=120)
     return result
 
 
@@ -202,7 +202,7 @@ def get_following_feed(
     posts = FeedService.get_following_feed(db, current_user.user_id, cursor, limit)
     result = _serialize_posts_batched(posts, current_user.user_id, db)
     
-    set_cache_sync(cache_key, result, expire_seconds=60)
+    set_cache_sync(cache_key, result, expire_seconds=120)
     return result
 
 
@@ -238,12 +238,13 @@ def like_post(
     existing = db.query(PostLike).filter(
         PostLike.post_id == post_id, PostLike.user_id == current_user.user_id
     ).first()
+    # Use COUNT scalar — avoids loading all PostLike rows into memory
+    likes_count = db.query(func.count(PostLike.like_id)).filter(PostLike.post_id == post_id).scalar() or 0
     if existing:
-        return {"message": "Already liked", "likes_count": len(post.likes)}
+        return {"message": "Already liked", "likes_count": likes_count}
 
     db.add(PostLike(user_id=current_user.user_id, post_id=post_id))
     db.commit()
-    db.refresh(post)
     # Notify post author
     actor_name = current_user.full_name or current_user.username or "Someone"
     create_notification(
@@ -256,7 +257,8 @@ def like_post(
         entity_id=post_id,
     )
     db.commit()
-    return {"message": "Liked", "likes_count": len(post.likes)}
+    new_count = (db.query(func.count(PostLike.like_id)).filter(PostLike.post_id == post_id).scalar() or 0)
+    return {"message": "Liked", "likes_count": new_count}
 
 
 @router.delete("/api/posts/{post_id}/like", status_code=status.HTTP_200_OK)
@@ -272,8 +274,8 @@ def unlike_post(
         return {"message": "Not liked"}
     db.delete(existing)
     db.commit()
-    post = db.query(Post).filter(Post.post_id == post_id).first()
-    return {"message": "Unliked", "likes_count": len(post.likes) if post else 0}
+    new_count = db.query(func.count(PostLike.like_id)).filter(PostLike.post_id == post_id).scalar() or 0
+    return {"message": "Unliked", "likes_count": new_count}
 
 
 # ─── Bookmarks ──────────────────────────────────────────────────────────────────

@@ -8,7 +8,8 @@ import {
   Terminal,
   Search,
   MessageSquare,
-  BarChart2
+  BarChart2,
+  BookOpen
 } from "lucide-react";
 import { Button } from "./ui/Button";
 import { getUnreadCount } from "../api/notificationsApi";
@@ -23,6 +24,9 @@ interface SidebarProps {
 export default function Sidebar({ activeTab, setActiveTab, onStudyNowClick }: SidebarProps) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [dmUnreadCount, setDmUnreadCount] = useState(0);
+  const [isHovered, setIsHovered] = useState(false);
+
+  const isCollapsed = !isHovered;
 
   // Poll unread counts every 30s
   useEffect(() => {
@@ -56,20 +60,28 @@ export default function Sidebar({ activeTab, setActiveTab, onStudyNowClick }: Si
   ];
 
   return (
-    <aside className="hidden lg:flex flex-col fixed left-0 top-0 h-full w-64 py-8 bg-surface border-r border-[#1A1A1A] z-40">
+    <aside 
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className={`hidden lg:flex flex-col fixed left-0 top-0 h-full py-8 bg-black z-50 transition-all duration-300 ease-in-out ${isCollapsed ? "w-[72px]" : "w-64"}`}
+    >
       {/* Brand Header */}
-      <div className="px-8 mb-12">
-        <div className="flex items-center gap-2">
-          <Terminal className="w-5 h-5 text-white font-bold" />
-          <h1 className="text-sm font-headline-md font-bold text-on-surface tracking-wider">STUDY LAB</h1>
+      <div 
+        className="flex flex-col px-3 overflow-hidden cursor-pointer group"
+        onClick={() => setActiveTab("feed")}
+        title="Go to Home"
+      >
+        <div className="flex items-center gap-3 pl-3 h-6">
+          <Terminal className="w-6 h-6 text-white font-bold flex-shrink-0 group-hover:text-blue-400 transition-colors" />
+          <h1 className={`text-sm font-headline-md font-bold text-on-surface tracking-wider whitespace-nowrap overflow-hidden transition-all duration-300 group-hover:text-white ${isCollapsed ? "opacity-0 max-w-0" : "opacity-100 max-w-[200px]"}`}>STUDY LAB</h1>
         </div>
-        <p className="text-[10px] font-mono tracking-widest text-on-surface-variant mt-1 opacity-50 uppercase">
+        <p className={`text-[10px] pl-3 font-mono tracking-widest text-on-surface-variant mt-1 uppercase whitespace-nowrap overflow-hidden transition-all duration-300 ${isCollapsed ? "opacity-0 max-w-0" : "opacity-50 max-w-[200px]"}`}>
           Workbench Edition
         </p>
       </div>
 
       {/* Navigation Ledger */}
-      <nav className="flex-1 px-4 space-y-1">
+      <nav className="flex-1 flex flex-col justify-center space-y-1 px-3 overflow-hidden">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -79,13 +91,14 @@ export default function Sidebar({ activeTab, setActiveTab, onStudyNowClick }: Si
               onClick={() => {
                 setActiveTab(item.id);
               }}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xs text-left transition-all duration-150 group cursor-pointer ${
+              className={`w-full flex items-center gap-4 pl-[14px] pr-4 py-3 rounded-md text-left transition-colors duration-150 group cursor-pointer ${
                 isActive
-                  ? "text-white bg-white/5 border-r border-white font-bold translate-x-1"
+                  ? "text-white bg-white/5 font-bold"
                   : "text-on-surface-variant/80 hover:bg-neutral-900/60 hover:text-white"
               }`}
+              title={isCollapsed ? item.label : undefined}
             >
-              <div className="relative">
+              <div className="relative flex-shrink-0">
                 <Icon 
                   className={`w-5 h-5 transition-colors ${
                     isActive ? "text-white" : "text-on-surface-variant group-hover:text-white"
@@ -98,32 +111,41 @@ export default function Sidebar({ activeTab, setActiveTab, onStudyNowClick }: Si
                   </span>
                 )}
               </div>
-              <span className="text-[13px] font-sans tracking-wide">{item.label}</span>
+              <span className={`text-[13px] font-sans tracking-wide whitespace-nowrap overflow-hidden transition-all duration-300 ${isCollapsed ? "opacity-0 max-w-0" : "opacity-100 max-w-[200px]"}`}>
+                {item.label}
+              </span>
             </button>
           );
         })}
       </nav>
 
       {/* Workspace Footer Settings & Action */}
-      <div className="px-4 mt-auto space-y-3">
+      <div className="space-y-2 px-3 overflow-hidden">
         <Button
           onClick={onStudyNowClick}
           variant="primary"
-          className="w-full shadow-[0_0_15px_rgba(255,255,255,0.1)]"
+          className="w-full shadow-[0_0_15px_rgba(255,255,255,0.1)] flex items-center justify-start gap-4 pl-[14px] pr-4 py-3 rounded-md overflow-hidden"
+          title={isCollapsed ? "Study Now" : undefined}
         >
-          Study Now
+          <BookOpen className="w-5 h-5 text-black flex-shrink-0" />
+          <span className={`whitespace-nowrap overflow-hidden transition-all duration-300 ${isCollapsed ? "opacity-0 max-w-0" : "opacity-100 max-w-[200px]"}`}>
+            Study Now
+          </span>
         </Button>
 
         <button
           onClick={() => setActiveTab("settings")}
-          className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xs text-left transition-all duration-150 cursor-pointer ${
+          className={`w-full flex items-center gap-4 pl-[14px] pr-4 py-3 rounded-md text-left transition-colors duration-150 cursor-pointer ${
             activeTab === "settings"
-              ? "text-white bg-white/5 border-r border-white font-semibold"
+              ? "text-white bg-white/5 font-semibold"
               : "text-on-surface-variant/80 hover:bg-neutral-900/60 hover:text-white"
           }`}
+          title={isCollapsed ? "Settings" : undefined}
         >
-          <Settings className="w-5 h-5" />
-          <span className="text-[13px] font-sans tracking-wide">Settings</span>
+          <Settings className="w-5 h-5 flex-shrink-0" />
+          <span className={`text-[13px] font-sans tracking-wide whitespace-nowrap overflow-hidden transition-all duration-300 ${isCollapsed ? "opacity-0 max-w-0" : "opacity-100 max-w-[200px]"}`}>
+            Settings
+          </span>
         </button>
       </div>
     </aside>
