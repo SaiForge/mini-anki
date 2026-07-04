@@ -1020,12 +1020,7 @@ export default function App() {
             setSearchQuery(""); // Clear search query on navigation
           }}
           onAddNewClick={() => {
-            if (activeTab === "decks") {
-              setActiveTab("decks");
-              // triggers show add deck form
-            } else {
-              setQuickAddDrawerMode("publish");
-            }
+            setQuickAddDrawerMode("publish");
           }}
           onOpenAssistant={() => setShowAiAssistant(true)}
           isDarkMode={isDarkMode}

@@ -197,7 +197,7 @@ export default function Header({
           onClick={onAddNewClick}
           variant="ghost"
           size="icon"
-          title={activeTab === "decks" ? "Create New Deck" : "Insert custom concept card"}
+          title="Insert custom concept card"
           className={`relative group rounded-full p-2.5 ${isDarkMode
               ? "text-on-surface-variant hover:text-white hover:bg-white/10"
               : "text-[#4a4e69] hover:text-[#22223b] hover:bg-[#22223b]/10"
@@ -208,7 +208,7 @@ export default function Header({
               ? "bg-[#131313] border-[#1a1a1a] text-white"
               : "bg-[#fdfbfb] border-[#c9ada7] text-[#22223b]"
             }`}>
-            {activeTab === "decks" ? "Create New Deck" : "Add Custom Post"}
+            Add Custom Post
           </span>
         </Button>
 
