@@ -176,12 +176,12 @@ export default function ExploreView({
 
       {/* Search Tabs */}
       {hasSearch && (
-        <div className={`flex items-center gap-6 border-b pb-4 mb-6 ${isDarkMode ? "border-white/10" : "border-[#c9ada7]/30"}`}>
+        <div className={`flex items-center gap-6 border-b pb-4 mb-6 overflow-x-auto no-scrollbar ${isDarkMode ? "border-white/10" : "border-[#c9ada7]/30"}`}>
           {(["all", "decks", "cards", "users"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setSearchTab(tab)}
-              className={`text-[13px] font-semibold transition-all duration-300 relative outline-none cursor-pointer ${searchTab === tab
+              className={`text-[13px] font-semibold transition-all duration-300 relative outline-none cursor-pointer flex-shrink-0 ${searchTab === tab
                 ? (isDarkMode ? "text-white" : "text-[#22223b]")
                 : (isDarkMode ? "text-zinc-500 hover:text-zinc-300" : "text-[#4a4e69] hover:text-[#22223b]")
                 }`}
@@ -199,6 +199,7 @@ export default function ExploreView({
           ))}
         </div>
       )}
+
 
       {/* Search results — related posts from feed */}
       {hasSearch && (

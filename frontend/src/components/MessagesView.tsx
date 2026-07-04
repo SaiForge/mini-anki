@@ -442,13 +442,13 @@ export default function MessagesView({ currentUserId, searchQuery, isDarkMode = 
   );
 
   // Theme tokens
-  const bg = isDarkMode ? "bg-black" : "bg-[#fdfbfb]";
+  const bg = "bg-transparent";
   const border = isDarkMode ? "border-white/[0.07]" : "border-[#c9ada7]/30";
-  const panelBg = isDarkMode ? "bg-black" : "bg-[#fdfbfb]";
+  const panelBg = "bg-transparent";
   const textPrimary = isDarkMode ? "text-zinc-100" : "text-[#22223b]";
   const textSecondary = isDarkMode ? "text-zinc-500" : "text-[#4a4e69]";
   const textMuted = isDarkMode ? "text-zinc-700" : "text-[#9a8c98]";
-  const inputBg = isDarkMode ? "bg-white/5 border-white/10 text-zinc-100 placeholder:text-zinc-600 focus:border-white/25" : "bg-[#22223b]/5 border-[#22223b]/15 text-[#22223b] placeholder:text-[#9a8c98] focus:border-[#22223b]/30";
+  const inputBg = isDarkMode ? "bg-white/5 border-white/10 text-zinc-100 placeholder:text-zinc-600 focus:border-white/25" : "bg-transparent border-[#22223b]/15 text-[#22223b] placeholder:text-[#9a8c98] focus:border-[#22223b]/30";
   const hoverBg = isDarkMode ? "hover:bg-white/5" : "hover:bg-[#22223b]/5";
   const activeBg = isDarkMode ? "bg-white/[0.06]" : "bg-[#22223b]/[0.06]";
   const activeAccent = isDarkMode ? "border-l-white" : "border-l-[#22223b]";
@@ -457,8 +457,9 @@ export default function MessagesView({ currentUserId, searchQuery, isDarkMode = 
   const sendBtn = isDarkMode ? "bg-white text-black hover:bg-zinc-200" : "bg-[#22223b] text-[#f2e9e4] hover:bg-[#1a1a2e]";
 
   return (
-    <div className="w-full h-[100vh] pb-16 lg:pb-0 flex">
+    <div className="w-full flex" style={{ height: "calc(100dvh - env(safe-area-inset-bottom, 0px))" }}>
       <div className={`w-full h-full flex overflow-hidden ${bg} border-t ${border}`}>
+
 
         {/* ── Left Panel: Conversation List ── */}
         <div className={`w-full lg:w-80 flex-shrink-0 border-r ${border} flex flex-col ${panelBg} ${selectedConv ? "hidden lg:flex" : "flex"}`}>
@@ -756,7 +757,7 @@ export default function MessagesView({ currentUserId, searchQuery, isDarkMode = 
                 </div>
 
                 {/* Input */}
-                <div className={`px-4 py-4 border-t ${border} flex items-center gap-3 flex-shrink-0`}>
+                <div className={`px-4 pt-4 pb-20 lg:pb-4 border-t ${border} flex items-center gap-3 flex-shrink-0`}>
                   <input
                     ref={inputRef}
                     type="text"

@@ -55,9 +55,9 @@ export function ConceptPublisher({ onClose, onPublish, isDarkMode = true, userDe
   };
 
   return (
-    <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto animated fadeIn">
+    <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-hidden sm:overflow-y-auto animated fadeIn">
       <div className={cn(
-        "w-full max-w-lg p-6 rounded-lg shadow-md relative transition-all duration-300",
+        "w-full max-w-lg p-6 rounded-t-3xl sm:rounded-lg shadow-md relative transition-all duration-300 max-h-[90dvh] sm:max-h-none overflow-y-auto",
         isDarkMode ? "bg-[#0a0a0a] border border-[#1C1C1C]" : "bg-[#fdfbfb] border border-[#c9ada7]"
       )}>
         

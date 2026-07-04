@@ -288,3 +288,60 @@
   height: 1px;
   visibility: hidden;
 }
+
+/* ── iOS Safe-area & Mobile Utilities ─────────────────────────────────────── */
+
+/* Safe-area bottom padding for elements above iOS home indicator */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.mb-safe {
+  margin-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Safe-area aware bottom nav height: 64px + safe-area */
+.h-nav-safe {
+  height: calc(64px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Content spacer that accounts for bottom nav + safe area */
+.content-bottom-pad {
+  padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Touch optimization */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent pull-to-refresh on mobile */
+html {
+  overscroll-behavior-y: none;
+}
+
+/* Better mobile text selection */
+.no-select {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Drop-up menu overlay */
+.mobile-nav-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 48;
+  background: transparent;
+}
+
+/* Floating pill nav animation */
+@keyframes pill-bounce-in {
+  0% { transform: translateY(100px) scale(0.8); opacity: 0; }
+  60% { transform: translateY(-6px) scale(1.02); opacity: 1; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.pill-nav-enter {
+  animation: pill-bounce-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+

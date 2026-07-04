@@ -319,7 +319,7 @@ def generate_cards(
     current_user: User = Depends(get_current_user),
 ):
     """Generate N flashcard pairs for a given topic using AI."""
-    count = min(req.count, 20)
+    count = min(req.count, 15)
     prompt = (
         f"Generate exactly {count} high-quality flashcard pairs about the topic: '{req.topic}'.\n"
         f"Each card should test a distinct concept. Use clear, concise language.\n"
@@ -350,7 +350,7 @@ def extract_cards_from_text(
     current_user: User = Depends(get_current_user),
 ):
     """Extract flashcard pairs from a block of text using AI."""
-    count = min(req.count, 30)
+    count = min(req.count, 15)
     truncated = req.text[:4000]
     prompt = (
         f"Extract up to {count} meaningful flashcard pairs from the following text.\n"
@@ -412,7 +412,7 @@ async def extract_cards_from_pdf(
     if not extracted_text:
         raise HTTPException(status_code=422, detail="No readable text found in the PDF.")
 
-    count = min(count, 30)
+    count = min(count, 15)
     truncated = extracted_text[:5000]
     prompt = (
         f"Extract up to {count} high-quality flashcard pairs from this PDF content.\n"

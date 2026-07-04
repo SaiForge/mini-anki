@@ -17,7 +17,8 @@ import {
   ArrowUpRight,
   ArrowLeft,
   Grid,
-  MessageSquare
+  MessageSquare,
+  User
 } from "lucide-react";
 import { FeedItem, StudyDeck } from "../types";
 import { FeedCard } from "./cards/FeedCard";
@@ -39,6 +40,7 @@ interface UserProfileViewProps {
   currentUserId?: string;
   currentUsername?: string;
   onMessageClick?: (user: { user_id: string; username: string; full_name: string | null; avatar_url: string | null }) => void;
+  isDarkMode?: boolean;
 }
 
 // Preset metadata for system authors
@@ -275,7 +277,8 @@ export default function UserProfileView({
   userEmail,
   currentUserId,
   currentUsername,
-  onMessageClick
+  onMessageClick,
+  isDarkMode = true
 }: UserProfileViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<"POSTS" | "DECKS">("POSTS");
   const [revealedItems, setRevealedItems] = useState<Record<string, boolean>>({});
@@ -535,154 +538,166 @@ export default function UserProfileView({
   };
 
   return (
-    <div className="w-full max-w-3xl mx-auto py-8 px-4 sm:px-6 relative animated fadeIn">
+    <div id="profile-view-container" className={`w-full min-h-screen pb-32 ${isDarkMode ? 'bg-transparent text-white' : 'bg-transparent text-[#2d3142]'}`}>
         
         {/* Back Action top left */}
-        <button 
-          id="close-profile-btn"
-          onClick={onClose}
-          className="mb-8 flex items-center gap-2 text-zinc-400 hover:text-white transition-colors cursor-pointer text-xs font-mono uppercase tracking-wider"
-          title="Go back"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Back</span>
-        </button>
+        <div className="w-full max-w-[640px] mx-auto px-4 sm:px-6 pt-4">
+          <button 
+            id="close-profile-btn"
+            onClick={onClose}
+            className="mb-4 flex items-center gap-2 text-zinc-400 hover:text-white transition-colors cursor-pointer text-xs font-mono uppercase tracking-wider"
+            title="Go back"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back</span>
+          </button>
+        </div>
 
-        {/* Main Card Element */}
-        <div id="profile-card" className="w-full">
-          <div className="space-y-6 pt-4">
+        {/* Main Profile Section */}
+        <div id="profile-card" className="w-full max-w-[640px] mx-auto relative">
+          <div className="space-y-6">
             
-            <div className="flex flex-col sm:flex-row sm:items-start gap-6 sm:gap-10">
-              {/* Avatar Section */}
-              <div className="flex justify-center sm:justify-start flex-shrink-0">
-                <div className="relative group">
-                    <div className={`w-24 h-24 sm:w-32 sm:h-32 rounded-full border border-[#1A1A1A] flex items-center justify-center text-3xl font-mono font-black uppercase ${userDetails.avatarBg}`}>
-                      {userDetails.avatar}
+            {/* Top Padding */}
+            <div className="pt-2"></div>
+
+            {/* Profile Content */}
+            <div className="px-4 sm:px-6 pb-6 pt-2">
+              
+              {/* Instagram-style Avatar & Stats Row */}
+              <div className="flex items-center justify-between mb-4 gap-4">
+                {/* Avatar */}
+                <div className="relative flex-shrink-0">
+                  <div className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full border-4 flex items-center justify-center shadow-sm ${isDarkMode ? 'bg-[#0f1115] border-[#0f1115]' : 'bg-[#ede8e3] border-[#ede8e3]'}`}>
+                    <span className={`text-3xl sm:text-4xl font-semibold ${isDarkMode ? 'text-zinc-200' : 'text-[#2d3142]'}`}>
+                      {userDetails.name ? userDetails.name.charAt(0).toUpperCase() : (userDetails.avatar || "U")}
+                    </span>
+                  </div>
+                  {/* Streak Badge */}
+                  <div className={`absolute -bottom-2 -right-2 rounded-xl px-2 py-1 flex items-center gap-1 shadow-md ${isDarkMode ? 'bg-zinc-800 border-[2.5px] border-[#0a0a0a]' : 'bg-[#2d3142]'}`}>
+                    <Flame className="w-3 h-3 text-orange-400" />
+                    <span className={`text-xs font-medium ${isDarkMode ? 'text-white' : 'text-[#ffffff]'}`}>{userDetails.streak}</span>
+                  </div>
+                </div>
+
+                {/* Stats */}
+                <div className="flex gap-4 sm:gap-6 justify-around flex-1 pl-2 sm:pl-8">
+                  <div className="flex flex-col items-center">
+                    <span className={`text-lg sm:text-xl font-bold ${isDarkMode ? 'text-white' : 'text-[#2d3142]'}`}>{publicPosts.length}</span>
+                    <span className={`text-[10px] sm:text-xs font-medium ${isDarkMode ? 'text-zinc-500' : 'text-[#2d3142]/60'}`}>posts</span>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <span className={`text-lg sm:text-xl font-bold ${isDarkMode ? 'text-white' : 'text-[#2d3142]'}`}>{userDetails.followers >= 1000 ? `${(userDetails.followers / 1000).toFixed(1)}k` : userDetails.followers}</span>
+                    <span className={`text-[10px] sm:text-xs font-medium ${isDarkMode ? 'text-zinc-500' : 'text-[#2d3142]/60'}`}>followers</span>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <span className={`text-lg sm:text-xl font-bold ${isDarkMode ? 'text-white' : 'text-[#2d3142]'}`}>{userDetails.following}</span>
+                    <span className={`text-[10px] sm:text-xs font-medium ${isDarkMode ? 'text-zinc-500' : 'text-[#2d3142]/60'}`}>following</span>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <span className={`text-lg sm:text-xl font-bold ${isDarkMode ? 'text-white' : 'text-[#2d3142]'}`}>{userDetails.decks?.length || 0}</span>
+                    <span className={`text-[10px] sm:text-xs font-medium ${isDarkMode ? 'text-zinc-500' : 'text-[#2d3142]/60'}`}>decks</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* User Info */}
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h2 className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-[#2d3142]'}`}>{userDetails.name}</h2>
+                  <span className={`text-xs font-semibold px-3 py-1 rounded-full tracking-wider uppercase ${isDarkMode ? 'bg-[#1c1f26] text-zinc-400' : 'bg-[#2d3142] text-[#ffffff]'}`}>
+                    {userDetails.role || "RESEARCH NODE"}
+                  </span>
+                </div>
+
+                <p className={`text-sm font-medium ${isDarkMode ? 'text-zinc-600' : 'text-[#2d3142]/50'}`}>@{username.startsWith("@") ? username.substring(1) : username}</p>
+
+                {/* Bio Card */}
+                {(userDetails.bio) && (
+                  <div className="mt-3 flex flex-col sm:flex-row sm:items-start gap-3">
+                    <div className="w-full">
+                      <p className={`text-xs font-medium sm:hidden ${isDarkMode ? 'text-zinc-600' : 'text-[#2d3142]/50'}`}>Bio</p>
+                      <p className={`text-sm font-semibold whitespace-pre-wrap leading-snug ${isDarkMode ? 'text-zinc-300' : 'text-[#2d3142]'}`}>{userDetails.bio}</p>
                     </div>
-                </div>
+                  </div>
+                )}
               </div>
 
-              {/* Info Column */}
-              <div className="flex-1 w-full space-y-4 sm:space-y-5">
-                
-                {/* 1. Full Name and Buttons */}
-                <div className="flex items-start justify-between w-full gap-4">
-                  <h2 id="profile-display-name" className="text-2xl sm:text-3xl font-bold text-white font-sans truncate flex items-baseline justify-center sm:justify-start gap-3">
-                    {userDetails.name}
-                    <span className="font-medium text-zinc-400 uppercase text-xs tracking-wider hidden sm:inline">{userDetails.role || "RESEARCH NODE"}</span>
-                  </h2>
-                  <div className="flex flex-row items-center gap-2 flex-shrink-0">
-                    {/* Profile Follow states */}
-                    {username !== "@kolarsaibag" && userEmail !== username && remoteUser && (
-                      <div className="flex flex-row items-center gap-2 flex-shrink-0">
-                        {!isFollowedStatus ? (
-                          <button
-                            onClick={handleToggleFollow}
-                            disabled={followProcessing}
-                            className="px-4 py-1.5 bg-primary hover:bg-primary/90 text-on-primary text-[10px] font-mono font-bold uppercase tracking-wider rounded transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                          >
-                            <UserPlus className="w-4 h-4" />
-                            <span>{followProcessing ? "..." : "Follow"}</span>
-                          </button>
-                        ) : (
-                          <button
-                            onClick={handleToggleFollow}
-                            disabled={followProcessing}
-                            className="px-4 py-1.5 bg-surface-container hover:bg-surface-high text-on-surface text-xs font-mono font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                          >
-                            <UserCheck className="w-4 h-4 text-green-500" />
-                            <span>{followProcessing ? "..." : "Following"}</span>
-                          </button>
-                        )}
-                        {userDetails.id && (
-                          <button
-                            onClick={() => onMessageClick?.({
-                              user_id: userDetails.id,
-                              username: username.startsWith('@') ? username.substring(1) : username,
-                              full_name: userDetails.name !== username ? userDetails.name : null,
-                              avatar_url: null
-                            })}
-                            className="px-4 py-1.5 bg-surface-container hover:bg-surface-high text-on-surface text-[10px] font-mono font-bold uppercase tracking-wider rounded transition-all flex items-center gap-1.5 cursor-pointer"
-                          >
-                            <MessageSquare className="w-4 h-4" />
-                            <span>Message</span>
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
+              {/* Action Buttons */}
+              {username !== "@kolarsaibag" && userEmail !== username && remoteUser && (
+                <div className="flex gap-3 mt-5">
+                  {!isFollowedStatus ? (
+                    <button
+                      onClick={handleToggleFollow}
+                      disabled={followProcessing}
+                      className={`flex-1 rounded-2xl py-3 text-sm font-semibold transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 ${isDarkMode ? 'bg-zinc-800 text-white hover:bg-zinc-700' : 'bg-[#2d3142] text-[#ffffff] hover:bg-[#3d4260]'}`}
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      {followProcessing ? "..." : "Follow"}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleToggleFollow}
+                      disabled={followProcessing}
+                      className={`flex-1 rounded-2xl py-3 text-sm font-semibold transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 ${isDarkMode ? 'bg-zinc-800/50 text-zinc-300 hover:bg-zinc-800' : 'bg-[#ede8e3] text-[#2d3142] hover:bg-[#e0d9d2]'}`}
+                    >
+                      <UserCheck className="w-4 h-4" />
+                      {followProcessing ? "..." : "Following"}
+                    </button>
+                  )}
+                  
+                  {userDetails.id && (
+                    <button
+                      onClick={() => onMessageClick?.({
+                        user_id: userDetails.id,
+                        username: username.startsWith('@') ? username.substring(1) : username,
+                        full_name: userDetails.name !== username ? userDetails.name : null,
+                        avatar_url: null
+                      })}
+                      className={`flex-1 rounded-2xl py-3 text-sm font-semibold transition-all shadow-sm flex items-center justify-center gap-2 ${isDarkMode ? 'bg-zinc-800/50 text-zinc-300 hover:bg-zinc-800' : 'bg-[#ede8e3] text-[#2d3142] hover:bg-[#e0d9d2]'}`}
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      Message
+                    </button>
+                  )}
                 </div>
-
-                {/* 2. Username */}
-                <div className="text-center sm:text-left text-base text-zinc-400 font-sans font-medium -mt-2">
-                  @{username.startsWith("@") ? username.substring(1) : username}
-                </div>
-
-                {/* 3. Stats Row */}
-                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-6 gap-y-3 pt-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-white font-sans text-base">{publicPosts.length}</span>
-                    <span className="text-[15px] text-zinc-300 font-sans">posts</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-white font-sans text-base">{userDetails.decks?.length || 0}</span>
-                    <span className="text-[15px] text-zinc-300 font-sans">decks</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-white font-sans text-base">{userDetails.followers >= 1000 ? `${(userDetails.followers / 1000).toFixed(1)}k` : userDetails.followers}</span>
-                    <span className="text-[15px] text-zinc-300 font-sans">followers</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-white font-sans text-base">{userDetails.following}</span>
-                    <span className="text-[15px] text-zinc-300 font-sans">following</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-white font-sans text-base">{userDetails.streak}</span>
-                    <span className="text-[15px] text-zinc-300 font-sans flex items-center gap-1"><Flame className="w-4 h-4 text-orange-500" /> streak</span>
-                  </div>
-                </div>
-
-                {/* 4. Bio Section */}
-                <div className="space-y-3 text-sm font-sans pt-2">
-                  <p className="text-white whitespace-pre-wrap max-w-lg mx-auto sm:mx-0 text-center sm:text-left text-[15px] leading-relaxed">
-                    {userDetails.bio || "No biography provided."}
-                  </p>
-                </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Tab Selector: Instagram Style */}
-        <div className="border-t border-[#1a1a1a] mt-10">
-          <div className="flex items-center justify-center gap-12 sm:gap-16">
-            <button
-              onClick={() => setActiveSubTab("POSTS")}
-              className={`flex items-center gap-2 py-4 text-xs font-sans font-bold tracking-widest uppercase transition-colors border-t border-transparent relative -top-px ${
-                activeSubTab === "POSTS"
-                  ? "border-white text-white"
-                  : "text-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              <Grid className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Concepts</span>
-            </button>
-            <button
-              onClick={() => setActiveSubTab("DECKS")}
-              className={`flex items-center gap-2 py-4 text-xs font-sans font-bold tracking-widest uppercase transition-colors border-t border-transparent relative -top-px ${
-                activeSubTab === "DECKS"
-                  ? "border-white text-white"
-                  : "text-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Decks</span>
-            </button>
+        {/* Bottom Content Section */}
+        <div className="w-full max-w-[640px] mx-auto min-h-[400px]">
+          
+          {/* Tab Selector: Instagram Style */}
+          <div className={`border-t border-b ${isDarkMode ? 'border-[#1a1a1a]' : 'border-[#1a1a1a]/10'} mt-2`}>
+            <div className="flex items-center justify-center gap-12 sm:gap-16">
+              <button
+                onClick={() => setActiveSubTab("POSTS")}
+                className={`flex items-center gap-2 py-4 text-xs font-sans font-bold tracking-widest uppercase transition-colors border-t border-transparent relative -top-px ${
+                  activeSubTab === "POSTS"
+                    ? (isDarkMode ? "border-white text-white" : "border-[#2d3142] text-[#2d3142]")
+                    : (isDarkMode ? "text-zinc-500 hover:text-zinc-300" : "text-[#2d3142]/50 hover:text-[#2d3142]/80")
+                }`}
+              >
+                <Grid className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Concepts</span>
+              </button>
+              <button
+                onClick={() => setActiveSubTab("DECKS")}
+                className={`flex items-center gap-2 py-4 text-xs font-sans font-bold tracking-widest uppercase transition-colors border-t border-transparent relative -top-px ${
+                  activeSubTab === "DECKS"
+                    ? (isDarkMode ? "border-white text-white" : "border-[#2d3142] text-[#2d3142]")
+                    : (isDarkMode ? "text-zinc-500 hover:text-zinc-300" : "text-[#2d3142]/50 hover:text-[#2d3142]/80")
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Decks</span>
+              </button>
+            </div>
           </div>
-        </div>
 
           {/* TAB CONTENTS */}
-          <div className="max-h-[340px] overflow-y-auto pr-2 scrollbar-thin">
+          <div className="mt-4 pb-32 px-4 sm:px-6">
             {activeSubTab === "POSTS" ? (
               <div className="space-y-4">
                 {postsLoading ? (
@@ -691,12 +706,15 @@ export default function UserProfileView({
                     <p className="text-xs text-zinc-500 font-mono uppercase tracking-wider">Loading concepts…</p>
                   </div>
                 ) : publicPosts.length === 0 ? (
-                  <p className="text-xs text-on-surface-variant/35 italic">No public lab concepts detected.</p>
+                  <div className="flex flex-col items-center justify-center py-20 opacity-50">
+                    <Grid className={`w-12 h-12 mb-4 ${isDarkMode ? 'text-zinc-500' : 'text-[#2d3142]'}`} />
+                    <p className={`text-sm font-sans ${isDarkMode ? 'text-white' : 'text-[#2d3142]'}`}>No concepts published yet.</p>
+                  </div>
                 ) : (
                   publicPosts.slice(0, displayLimit).map((post) => (
                     <FeedCard
                       key={post.id}
-                      isDarkMode={true}
+                      isDarkMode={isDarkMode}
                       viewMode="feed"
                       feedItem={post}
                       isSingle={false}
@@ -714,61 +732,52 @@ export default function UserProfileView({
               </div>
             ) : (
               <div className="space-y-4">
-                {(!userDetails.decks || userDetails.decks.length === 0) ? (
-                  <p className="text-xs text-on-surface-variant/35 italic">No public recall decks registered.</p>
+                {userDetails.decks.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 opacity-50">
+                    <Layers className={`w-12 h-12 mb-4 ${isDarkMode ? 'text-zinc-500' : 'text-[#2d3142]'}`} />
+                    <p className={`text-sm font-sans ${isDarkMode ? 'text-white' : 'text-[#2d3142]'}`}>No public decks available.</p>
+                  </div>
                 ) : (
-                  userDetails.decks.slice(0, displayLimit).map((deck) => {
-                    const isImported = userDecks.some(uDeck => uDeck.title.toLowerCase() === deck.title.toLowerCase());
-                    return (
-                      <div 
-                        key={deck.id}
-                        className="p-5 border border-outline-variant bg-surface-container-lowest rounded-xl hover:border-outline transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-                      >
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[9px] font-mono border border-outline-variant text-on-surface-variant px-1.5 py-0.5 rounded tracking-wide font-bold uppercase">
-                              {deck.category}
-                            </span>
-                            <span className="text-[10px] font-mono text-on-surface-variant uppercase">{deck.cardCount || deck.cards?.length || 0} cards</span>
-                          </div>
-                          <h4 className="text-sm font-semibold font-sans text-on-surface">{deck.title}</h4>
-                          <p className="text-xs text-on-surface-variant font-light leading-relaxed font-sans">{deck.description}</p>
-                          
-                          {deck.progress > 0 && (
-                            <div className="pt-2 flex items-center gap-2 max-w-[200px]">
-                              <div className="h-1 bg-surface rounded-full flex-1 overflow-hidden">
-                                <div 
-                                  className="h-full bg-on-surface rounded-full"
-                                  style={{ width: `${deck.progress}%` }}
-                                />
-                              </div>
-                              <span className="text-[9px] font-mono text-on-surface-variant">{deck.progress}% mastery</span>
-                            </div>
-                          )}
+                  userDetails.decks.slice(0, displayLimit).map((deck: any) => (
+                    <div 
+                      key={deck.id}
+                      className={`p-5 border rounded-xl hover:border-outline transition-colors flex flex-col sm:flex-row sm:items-start justify-between gap-4 relative ${isDarkMode ? 'bg-[#16181d] border-[#1c1f26]' : 'bg-[#fcfaf9] border-[#ede8e3]'}`}
+                    >
+                      <div className="space-y-1.5 flex-1 min-w-0 pr-16">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[9px] font-mono border px-1.5 py-0.5 rounded tracking-wide font-bold uppercase ${isDarkMode ? 'border-zinc-700 text-zinc-400' : 'border-[#d6ccc2] text-[#8e857c]'}`}>
+                            {deck.category}
+                          </span>
                         </div>
-
-                        <div className="flex flex-row sm:flex-col gap-2 flex-shrink-0 sm:items-end">
-                          <button
-                            onClick={() => {
-                              onStudyDeck(deck.title, deck.id);
-                            }}
-                            className="bg-white hover:bg-zinc-200 text-black text-xs font-mono px-3 py-1.5 rounded-xs transition-colors flex items-center gap-1 cursor-pointer font-bold"
-                          >
-                            <span>Study</span>
-                            <ArrowUpRight className="w-3 h-3 text-black" />
-                          </button>
-                        </div>
+                        <h4 className={`text-sm font-semibold font-sans ${isDarkMode ? 'text-white' : 'text-[#2d3142]'}`}>{deck.title}</h4>
+                        <p className={`text-xs font-light leading-relaxed font-sans line-clamp-2 break-all ${isDarkMode ? 'text-zinc-400' : 'text-[#8e857c]'}`}>{deck.description}</p>
                       </div>
-                    );
-                  })
+
+                      <div className="absolute top-5 right-5">
+                        <span className={`text-[10px] font-mono uppercase ${isDarkMode ? 'text-zinc-500' : 'text-[#8e857c]'}`}>{deck.cardCount || deck.cards?.length || 0} cards</span>
+                      </div>
+
+                      <div className="flex flex-row sm:flex-col gap-2 flex-shrink-0 sm:items-end self-end">
+                        <button 
+                          onClick={() => {
+                            onStudyDeck(deck.title, deck.id);
+                          }}
+                          className={`text-xs font-mono px-3 py-1.5 rounded-xs transition-colors flex items-center gap-1 cursor-pointer font-bold ${isDarkMode ? 'bg-white text-black hover:bg-zinc-200' : 'bg-[#2d3142] text-[#ffffff] hover:bg-[#1a1c25]'}`}
+                        >
+                          <span>Study</span>
+                          <ArrowUpRight className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
                 )}
-                {userDetails.decks && userDetails.decks.length > displayLimit && (
+                {userDetails.decks.length > displayLimit && (
                    <div ref={loadMoreRef} className="py-6 text-center text-xs text-zinc-500 font-mono flex justify-center"><div className="w-4 h-4 border-2 border-zinc-700 border-t-white rounded-full animate-spin" /></div>
                 )}
               </div>
             )}
           </div>
-      </div>
-    
+        </div>
+    </div>
   );
 }

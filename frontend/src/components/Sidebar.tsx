@@ -52,7 +52,7 @@ export default function Sidebar({ activeTab, setActiveTab, onStudyNowClick }: Si
   const navItems = [
     { id: "decks", label: "Decks", icon: Layers },
     { id: "feed", label: "Explore", icon: Compass },
-    { id: "explore", label: "Search", icon: Search },
+    { id: "explore", label: "Discover", icon: Search },
     { id: "messages", label: "Messages", icon: MessageSquare, badge: dmUnreadCount },
     { id: "analytics", label: "Analytics", icon: BarChart2 },
     { id: "notifications", label: "Notifications", icon: Bell, badge: unreadCount },

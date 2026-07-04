@@ -493,7 +493,14 @@ export default function AIChatPanel({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", justifyContent: "flex-end", background: T.overlay }}
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 50,
+          display: "flex",
+          justifyContent: "flex-end",
+          background: typeof window !== "undefined" && window.innerWidth < 1024 ? "transparent" : T.overlay,
+        }}
         onClick={e => { if (e.target === e.currentTarget) onClose(); }}
       >
         <motion.div
@@ -501,7 +508,17 @@ export default function AIChatPanel({
           animate={{ x: 0 }}
           exit={{ x: "100%" }}
           transition={{ type: "spring", damping: 30, stiffness: 300 }}
-          style={{ position: "relative", display: "flex", flexDirection: "column", height: "100%", width: "100%", maxWidth: 500, background: T.bg, borderLeft: `1px solid ${T.border}`, overflow: "hidden" }}
+          style={{
+            position: "relative",
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
+            width: "100%",
+            maxWidth: typeof window !== "undefined" && window.innerWidth < 1024 ? "100vw" : 500,
+            background: T.bg,
+            borderLeft: `1px solid ${T.border}`,
+            overflow: "hidden",
+          }}
           onClick={e => e.stopPropagation()}
         >
           {/* ── Blurry Background ── */}
@@ -914,12 +931,12 @@ export default function AIChatPanel({
                                     <div style={{ height: 1, background: d ? "rgba(255,255,255,0.1)" : "rgba(201,173,167,0.3)", margin: "4px 0" }} />
                                     <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 6px" }}>
                                       <span style={{ fontSize: 12, color: T.textSub, fontWeight: 500 }}>Custom</span>
-                                      <input type="number" min={1} max={40} value={cardCount}
+                                      <input type="number" min={1} max={15} value={cardCount}
                                         onClick={e => e.stopPropagation()}
                                         onChange={e => {
                                           let v = parseInt(e.target.value);
                                           if (isNaN(v)) return;
-                                          if (v > 40) v = 40;
+                                          if (v > 15) v = 15;
                                           if (v < 1) v = 1;
                                           setCardCount(v);
                                         }}

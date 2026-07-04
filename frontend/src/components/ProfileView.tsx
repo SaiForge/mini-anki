@@ -173,7 +173,7 @@ export default function ProfileView({ userEmail, currentUser, onProfileUpdate, s
 
   const addTag = () => {
     const cleaned = newTagInput.trim();
-    if (cleaned && !draft.tags.includes(cleaned)) {
+    if (cleaned && !draft.tags.includes(cleaned) && draft.tags.length < 10) {
       setDraft({
         ...draft,
         tags: [...draft.tags, cleaned]
@@ -190,7 +190,7 @@ export default function ProfileView({ userEmail, currentUser, onProfileUpdate, s
   };
 
   return (
-    <div id="profile-view-container" className="max-w-3xl mx-auto py-8 px-4 sm:px-6 space-y-8 pb-32">
+    <div id="profile-view-container" className={`w-full min-h-screen pb-32 ${isDarkMode ? 'bg-transparent text-white' : 'bg-transparent text-[#2d3142]'}`}>
       
       {/* Top action status feedback */}
       {successMsg && (
@@ -202,97 +202,103 @@ export default function ProfileView({ userEmail, currentUser, onProfileUpdate, s
         </div>
       )}
 
-      {/* Main Card Element */}
-      <div id="profile-card" className="w-full">
+      {/* Main Profile Section */}
+      <div id="profile-card" className="w-full max-w-[640px] mx-auto relative">
         
         {/* Read Mode Content */}
         {!isEditing ? (
-          <div className="space-y-6 pt-4">
-            
-            {/* Instagram Style Header */}
-            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 sm:gap-10 text-center sm:text-left">
+          <div>
+            {/* Top Action Bar (Edit Button) */}
+            <div className="flex justify-end pt-4 pr-4 sm:pr-6">
+              <button
+                onClick={() => setIsEditing(true)}
+                className={`transition-all p-2 rounded-full z-10 ${isDarkMode ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300' : 'bg-[#ede8e3]/80 hover:bg-[#ede8e3] text-[#2d3142]'}`}
+                title="Edit Profile"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Profile Content */}
+            <div className="px-4 sm:px-6 pb-6 pt-2">
               
-              {/* Avatar Column */}
-              <div className="flex-shrink-0">
-                <div
-                  className="relative group w-32 h-32 md:w-40 md:h-40 mx-auto md:mx-0 flex-shrink-0"
-                  title="Your Profile Picture"
-                >
-                  <div className="w-full h-full rounded-full border border-[#1A1A1A] bg-zinc-900 flex items-center justify-center text-4xl font-mono text-white uppercase select-none">
-                    {profile.name ? profile.name.charAt(0) : "U"}
+              {/* Instagram-style Avatar & Stats Row */}
+              <div className="flex items-center justify-between mb-4 gap-4">
+                {/* Avatar */}
+                <div className="relative flex-shrink-0">
+                  <div className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full border-4 flex items-center justify-center shadow-sm ${isDarkMode ? 'bg-[#0f1115] border-[#0f1115]' : 'bg-[#ede8e3] border-[#ede8e3]'}`}>
+                    <span className={`text-3xl sm:text-4xl font-semibold ${isDarkMode ? 'text-zinc-200' : 'text-[#2d3142]'}`}>
+                      {profile.name ? profile.name.charAt(0).toUpperCase() : "U"}
+                    </span>
+                  </div>
+                  {/* Streak Badge */}
+                  <div className={`absolute -bottom-2 -right-2 rounded-xl px-2 py-1 flex items-center gap-1 shadow-md ${isDarkMode ? 'bg-zinc-800 border-[2.5px] border-[#0a0a0a]' : 'bg-[#2d3142]'}`}>
+                    <Flame className="w-3 h-3 text-orange-400" />
+                    <span className={`text-xs font-medium ${isDarkMode ? 'text-white' : 'text-[#ffffff]'}`}>{currentUser?.current_streak ?? stats.dailyStreak}</span>
+                  </div>
+                </div>
+
+                {/* Stats */}
+                <div className="flex gap-4 sm:gap-6 justify-around flex-1 pl-2 sm:pl-8">
+                  <div className="flex flex-col items-center">
+                    <span className={`text-lg sm:text-xl font-bold ${isDarkMode ? 'text-white' : 'text-[#2d3142]'}`}>{publicPosts.length}</span>
+                    <span className={`text-[10px] sm:text-xs font-medium ${isDarkMode ? 'text-zinc-500' : 'text-[#2d3142]/60'}`}>posts</span>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <span className={`text-lg sm:text-xl font-bold ${isDarkMode ? 'text-white' : 'text-[#2d3142]'}`}>{profile.followers >= 1000 ? `${(profile.followers / 1000).toFixed(1)}k` : profile.followers}</span>
+                    <span className={`text-[10px] sm:text-xs font-medium ${isDarkMode ? 'text-zinc-500' : 'text-[#2d3142]/60'}`}>followers</span>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <span className={`text-lg sm:text-xl font-bold ${isDarkMode ? 'text-white' : 'text-[#2d3142]'}`}>{profile.following}</span>
+                    <span className={`text-[10px] sm:text-xs font-medium ${isDarkMode ? 'text-zinc-500' : 'text-[#2d3142]/60'}`}>following</span>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <span className={`text-lg sm:text-xl font-bold ${isDarkMode ? 'text-white' : 'text-[#2d3142]'}`}>{publicDecks.length}</span>
+                    <span className={`text-[10px] sm:text-xs font-medium ${isDarkMode ? 'text-zinc-500' : 'text-[#2d3142]/60'}`}>decks</span>
                   </div>
                 </div>
               </div>
 
-              {/* Info Column */}
-              <div className="flex-1 w-full space-y-4 sm:space-y-5">
-                
-                {/* 1. Full Name and Buttons */}
-                <div className="flex items-start justify-between w-full gap-4">
-                  <h2 id="profile-display-name" className="text-2xl sm:text-3xl font-bold text-white font-sans truncate flex items-baseline justify-center sm:justify-start gap-3">
-                    {profile.name}
-                    <span className="font-medium text-zinc-400 uppercase text-xs tracking-wider">{profile.role}</span>
-                  </h2>
-                  <button
-                    id="edit-profile-toggle"
-                    onClick={() => setIsEditing(true)}
-                    className="p-2 -mr-2 sm:mr-0 hover:bg-[#262626] text-zinc-400 hover:text-white rounded-lg transition-all flex-shrink-0"
-                    title="Edit Profile"
-                  >
-                    <Pencil className="w-5 h-5" />
-                  </button>
-                </div>
-
-                {/* 2. Username */}
-                <div className="text-center sm:text-left text-base text-zinc-400 font-sans font-medium -mt-2">
-                  @{currentUser?.username || userEmail.split("@")[0]}
-                </div>
-
-                {/* 3. Stats Row */}
-                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-6 gap-y-3 pt-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-white font-sans text-base">{publicPosts.length}</span>
-                    <span className="text-[15px] text-zinc-300 font-sans">posts</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-white font-sans text-base">{publicDecks.length}</span>
-                    <span className="text-[15px] text-zinc-300 font-sans">decks</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-white font-sans text-base">{profile.followers}</span>
-                    <span className="text-[15px] text-zinc-300 font-sans">followers</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-white font-sans text-base">{profile.following}</span>
-                    <span className="text-[15px] text-zinc-300 font-sans">following</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-white font-sans text-base">{currentUser?.current_streak ?? stats.dailyStreak}</span>
-                    <span className="text-[15px] text-zinc-300 font-sans flex items-center gap-1"><Flame className="w-4 h-4 text-orange-500" /> streak</span>
-                  </div>
-                </div>
-
-                {/* 4. Bio Section */}
-                <div className="space-y-3 text-sm font-sans pt-2">
-                  <p className="text-white whitespace-pre-wrap max-w-lg mx-auto sm:mx-0 text-center sm:text-left text-[15px] leading-relaxed">
-                    {profile.bio || "No biography provided. Click Edit Profile to set up your developer synopsis."}
-                  </p>
-                  
-                  {/* 5. Expertise Tags */}
-                  {profile.tags.length > 0 && (
-                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-2 gap-y-2 pt-2">
-                      {profile.tags.map((tag, idx) => (
-                        <span key={idx} className="text-xs text-blue-300 hover:text-blue-200 font-sans cursor-pointer transition-colors bg-[#112240] border border-[#233554] px-2.5 py-1 rounded-md">
-                          #{tag.replace(/\s+/g, '')}
-                        </span>
-                      ))}
-                    </div>
+              {/* User Info */}
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h2 className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-[#2d3142]'}`}>{profile.name}</h2>
+                  {profile.role && (
+                    <span className={`text-xs font-semibold px-3 py-1 rounded-full tracking-wider uppercase ${isDarkMode ? 'bg-[#1c1f26] text-zinc-400' : 'bg-[#2d3142] text-[#ffffff]'}`}>
+                      {profile.role}
+                    </span>
                   )}
                 </div>
 
-              </div>
-            </div>
+                <p className={`text-sm font-medium ${isDarkMode ? 'text-zinc-600' : 'text-[#2d3142]/50'}`}>@{currentUser?.username || userEmail.split("@")[0]}</p>
 
+                {/* Bio Card */}
+                {(profile.bio || profile.tags.length > 0) && (
+                  <div className="mt-3 flex flex-col sm:flex-row sm:items-start gap-3">
+                    <div className="w-full">
+                      {profile.bio && (
+                        <>
+                          <p className={`text-xs font-medium sm:hidden ${isDarkMode ? 'text-zinc-600' : 'text-[#2d3142]/50'}`}>Bio</p>
+                          <p className={`text-sm font-semibold whitespace-pre-wrap leading-snug ${isDarkMode ? 'text-zinc-300' : 'text-[#2d3142]'}`}>{profile.bio}</p>
+                        </>
+                      )}
+                      
+                      {/* Tags */}
+                      {profile.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 pt-2">
+                          {profile.tags.map((tag, idx) => (
+                            <span key={idx} className={`text-xs font-semibold px-2 py-0.5 rounded-lg ${isDarkMode ? 'bg-[#1c1f26] text-zinc-400' : 'bg-[#2d3142]/10 text-[#2d3142]/70'}`}>
+                              #{tag.replace(/\s+/g, '')}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+            </div>
           </div>
         ) : (
           
@@ -371,7 +377,7 @@ export default function ProfileView({ userEmail, currentUser, onProfileUpdate, s
                     id="edit-bio"
                     value={draft.bio}
                     onChange={(e) => setDraft({ ...draft, bio: e.target.value })}
-                    maxLength={300}
+                    maxLength={160}
                     rows={3}
                     placeholder="Describe your primary development paradigms and focus areas..."
                     className={cn(
@@ -381,6 +387,9 @@ export default function ProfileView({ userEmail, currentUser, onProfileUpdate, s
                         : "bg-transparent border border-[#c9ada7] focus:border-[#22223b] placeholder:text-[#4a4e69]/50 text-[#22223b]"
                     )}
                   />
+                  <div className="text-right text-[10px] mt-1 text-on-surface-variant/50 font-mono">
+                    {draft.bio.length} / 160
+                  </div>
                 </div>
 
                 {/* Editable Tag Skill Manager */}
@@ -423,7 +432,8 @@ export default function ProfileView({ userEmail, currentUser, onProfileUpdate, s
                           addTag();
                         }
                       }}
-                      placeholder="Add learning focus (e.g. Docker, TypeScript)"
+                      placeholder={draft.tags.length >= 10 ? "Maximum tags reached" : "Add learning focus (e.g. Docker, TypeScript)"}
+                      disabled={draft.tags.length >= 10}
                       isDarkMode={isDarkMode}
                       className="flex-1 text-left font-sans"
                     />
@@ -434,12 +444,13 @@ export default function ProfileView({ userEmail, currentUser, onProfileUpdate, s
                       size="icon"
                       isDarkMode={isDarkMode}
                       onClick={addTag}
+                      disabled={draft.tags.length >= 10}
                       className="px-3"
                     >
                       <Plus className="w-4 h-4" />
                     </Button>
                   </div>
-                  <span className="text-[9px] font-mono text-on-surface-variant/50 uppercase block">Press Enter or click (+) to push focus values. Click tag to incinerate.</span>
+                  <span className="text-[9px] font-mono text-on-surface-variant/50 uppercase block">Press Enter or click (+) to push focus values. Max 10 tags allowed. Click tag to incinerate.</span>
                 </div>
 
               </div>
@@ -452,48 +463,52 @@ export default function ProfileView({ userEmail, currentUser, onProfileUpdate, s
       </div>
 
       
-      {/* Tab Selector: Instagram Style */}
-      <div className="border-t border-[#1a1a1a] mt-10">
-        <div className="flex items-center justify-center gap-12 sm:gap-16">
-          <button
-            onClick={() => setActiveSubTab("POSTS")}
-            className={`flex items-center gap-2 py-4 text-xs font-sans font-bold tracking-widest uppercase transition-colors border-t border-transparent relative -top-px ${
-              activeSubTab === "POSTS"
-                ? "border-white text-white"
-                : "text-zinc-500 hover:text-zinc-300"
-            }`}
-          >
-            <Grid className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Concepts</span>
-          </button>
-          <button
-            onClick={() => setActiveSubTab("DECKS")}
-            className={`flex items-center gap-2 py-4 text-xs font-sans font-bold tracking-widest uppercase transition-colors border-t border-transparent relative -top-px ${
-              activeSubTab === "DECKS"
-                ? "border-white text-white"
-                : "text-zinc-500 hover:text-zinc-300"
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Decks</span>
-          </button>
+      {/* Bottom Content Section */}
+      {!isEditing && (
+        <div className="w-full max-w-[640px] mx-auto min-h-[400px]">
+        
+        {/* Tab Selector: Instagram Style */}
+        <div className={`border-t border-b ${isDarkMode ? 'border-[#1a1a1a]' : 'border-[#1a1a1a]/10'} mt-2`}>
+          <div className="flex items-center justify-center gap-12 sm:gap-16">
+            <button
+              onClick={() => setActiveSubTab("POSTS")}
+              className={`flex items-center gap-2 py-4 text-xs font-sans font-bold tracking-widest uppercase transition-colors border-t border-transparent relative -top-px ${
+                activeSubTab === "POSTS"
+                  ? (isDarkMode ? "border-white text-white" : "border-[#2d3142] text-[#2d3142]")
+                  : (isDarkMode ? "text-zinc-500 hover:text-zinc-300" : "text-[#2d3142]/50 hover:text-[#2d3142]/80")
+              }`}
+            >
+              <Grid className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Concepts</span>
+            </button>
+            <button
+              onClick={() => setActiveSubTab("DECKS")}
+              className={`flex items-center gap-2 py-4 text-xs font-sans font-bold tracking-widest uppercase transition-colors border-t border-transparent relative -top-px ${
+                activeSubTab === "DECKS"
+                  ? (isDarkMode ? "border-white text-white" : "border-[#2d3142] text-[#2d3142]")
+                  : (isDarkMode ? "text-zinc-500 hover:text-zinc-300" : "text-[#2d3142]/50 hover:text-[#2d3142]/80")
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Decks</span>
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* TAB CONTENTS */}
-      <div className="mt-4 pb-32">
-        {activeSubTab === "POSTS" ? (
+        {/* TAB CONTENTS */}
+        <div className="mt-4 pb-32 px-4 sm:px-6">
+          {activeSubTab === "POSTS" ? (
           <div className="space-y-4 pb-4">
             {publicPosts.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 opacity-50">
-                <Grid className="w-12 h-12 mb-4" />
-                <p className="text-sm font-sans">No concepts published yet.</p>
+                <Grid className={`w-12 h-12 mb-4 ${isDarkMode ? 'text-zinc-500' : 'text-[#2d3142]'}`} />
+                <p className={`text-sm font-sans ${isDarkMode ? 'text-white' : 'text-[#2d3142]'}`}>No concepts published yet.</p>
               </div>
             ) : (
               publicPosts.slice(0, displayLimit).map((post) => (
                 <FeedCard
                   key={post.id}
-                  isDarkMode={true}
+                  isDarkMode={isDarkMode}
                   viewMode="feed"
                   feedItem={post}
                   isSingle={false}
@@ -514,47 +529,38 @@ export default function ProfileView({ userEmail, currentUser, onProfileUpdate, s
           <div className="space-y-4 pb-4">
             {publicDecks.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 opacity-50">
-                <Layers className="w-12 h-12 mb-4" />
-                <p className="text-sm font-sans">No decks published yet.</p>
+                <Layers className={`w-12 h-12 mb-4 ${isDarkMode ? 'text-zinc-500' : 'text-[#2d3142]'}`} />
+                <p className={`text-sm font-sans ${isDarkMode ? 'text-white' : 'text-[#2d3142]'}`}>No public decks available.</p>
               </div>
             ) : (
               publicDecks.slice(0, displayLimit).map((deck) => (
                   <div 
                     key={deck.id}
-                    className="p-5 border border-outline-variant bg-surface-container-lowest rounded-xl hover:border-outline transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                    className={`p-5 border rounded-xl hover:border-outline transition-colors flex flex-col sm:flex-row sm:items-start justify-between gap-4 relative ${isDarkMode ? 'bg-[#16181d] border-[#1c1f26]' : 'bg-[#fcfaf9] border-[#ede8e3]'}`}
                   >
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5 flex-1 min-w-0 pr-16">
                       <div className="flex items-center gap-2">
-                        <span className="text-[9px] font-mono border border-outline-variant text-on-surface-variant px-1.5 py-0.5 rounded tracking-wide font-bold uppercase">
+                        <span className={`text-[9px] font-mono border px-1.5 py-0.5 rounded tracking-wide font-bold uppercase ${isDarkMode ? 'border-zinc-700 text-zinc-400' : 'border-[#d6ccc2] text-[#8e857c]'}`}>
                           {deck.category}
                         </span>
-                        <span className="text-[10px] font-mono text-on-surface-variant uppercase">{deck.cardCount || deck.cards?.length || 0} cards</span>
                       </div>
-                      <h4 className="text-sm font-semibold font-sans text-on-surface">{deck.title}</h4>
-                      <p className="text-xs text-on-surface-variant font-light leading-relaxed font-sans">{deck.description}</p>
-                      
-                      {deck.progress > 0 && (
-                        <div className="pt-2 flex items-center gap-2 max-w-[200px]">
-                          <div className="h-1 bg-surface rounded-full flex-1 overflow-hidden">
-                            <div 
-                              className="h-full bg-on-surface rounded-full"
-                              style={{ width: `${deck.progress}%` }}
-                            />
-                          </div>
-                          <span className="text-[9px] font-mono text-on-surface-variant">{deck.progress}% mastery</span>
-                        </div>
-                      )}
+                      <h4 className={`text-sm font-semibold font-sans ${isDarkMode ? 'text-white' : 'text-[#2d3142]'}`}>{deck.title}</h4>
+                      <p className={`text-xs font-light leading-relaxed font-sans line-clamp-2 break-all ${isDarkMode ? 'text-zinc-400' : 'text-[#8e857c]'}`}>{deck.description}</p>
                     </div>
 
-                    <div className="flex flex-row sm:flex-col gap-2 flex-shrink-0 sm:items-end">
+                    <div className="absolute top-5 right-5">
+                      <span className={`text-[10px] font-mono uppercase ${isDarkMode ? 'text-zinc-500' : 'text-[#8e857c]'}`}>{deck.cardCount || deck.cards?.length || 0} cards</span>
+                    </div>
+
+                    <div className="flex flex-row sm:flex-col gap-2 flex-shrink-0 sm:items-end self-end">
                       <button
                         onClick={() => {
                           onStudyDeck(deck.title, deck.id);
                         }}
-                        className="bg-white hover:bg-zinc-200 text-black text-xs font-mono px-3 py-1.5 rounded-xs transition-colors flex items-center gap-1 cursor-pointer font-bold"
+                        className={`text-xs font-mono px-3 py-1.5 rounded-xs transition-colors flex items-center gap-1 cursor-pointer font-bold ${isDarkMode ? 'bg-white text-black hover:bg-zinc-200' : 'bg-[#2d3142] text-[#ffffff] hover:bg-[#1a1c25]'}`}
                       >
                         <span>Study</span>
-                        <ArrowUpRight className="w-3 h-3 text-black" />
+                        <ArrowUpRight className="w-3 h-3" />
                       </button>
                     </div>
                   </div>
@@ -563,8 +569,11 @@ export default function ProfileView({ userEmail, currentUser, onProfileUpdate, s
               {publicDecks.length > displayLimit && (
                  <div ref={loadMoreRef} className="py-6 text-center text-xs text-zinc-500 font-mono flex justify-center"><div className="w-4 h-4 border-2 border-zinc-700 border-t-white rounded-full animate-spin" /></div>
               )}
-            </div>
-          )}
-        </div>    </div>
+          </div>
+        )}
+      </div>
+        </div>
+      )}
+    </div>
   );
 }

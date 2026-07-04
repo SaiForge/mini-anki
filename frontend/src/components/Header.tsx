@@ -63,7 +63,12 @@ export default function Header({
   }, []);
 
   return (
-    <header className={`sticky top-0 z-30 flex justify-between items-center w-full px-4 h-20 bg-transparent pointer-events-none ${activeTab === "explore" ? "lg:px-8" : "lg:px-[184px]"}`}>
+    <>
+      {activeTab !== "decks" && (
+        <header 
+          className={`sticky top-0 z-30 flex justify-between items-center w-full px-4 bg-transparent pointer-events-none ${activeTab === "explore" ? "lg:px-8" : "lg:px-[184px]"}`}
+          style={{ paddingTop: "env(safe-area-inset-top, 0px)", height: "calc(80px + env(safe-area-inset-top, 0px))" }}
+        >
       {/* Brand & Desktop Quick Filters */}
       <div className="flex items-center gap-8 flex-1 pointer-events-auto min-w-0">
         {activeTab === "feed" && feedSubTab && setFeedSubTab ? (
@@ -101,7 +106,7 @@ export default function Header({
               DECKS
             </button>
           </div>
-        ) : activeTab === "profile" || activeTab === "notifications" || activeTab === "analytics" || activeTab === "user-profile" || activeTab === "study" || activeTab === "messages" ? null : (
+        ) : activeTab === "profile" || activeTab === "notifications" || activeTab === "analytics" || activeTab === "user-profile" || activeTab === "study" || activeTab === "messages" || activeTab === "decks" ? null : (
           /* Integrated Search Bar with keyboard indicator */
           <div className={`flex items-center rounded-full px-4 py-2.5 w-full md:w-56 lg:w-72 transition-all duration-300 transform ${isVisible
               ? "opacity-100 translate-y-0 scale-100"
@@ -167,16 +172,27 @@ export default function Header({
         )}
       </div>
 
+      </header>
+      )}
+
       {/* Control Actions & Workbench (Floating FAB Pill in bottom right) */}
       {["decks", "explore", "feed"].includes(activeTab) && (
-        <div className={`fixed bottom-20 lg:bottom-8 right-6 lg:right-8 flex items-center gap-2 rounded-full p-2.5 pointer-events-auto transition-all duration-300 z-40 transform ${isVisible
-          ? "opacity-100 translate-y-0 scale-100"
-          : "opacity-0 translate-y-16 scale-90 pointer-events-none"
-        } ${isDarkMode
-          ? "bg-[#0e0e0e]/95 border border-[#1A1A1A] shadow-[0_8px_30px_rgba(0,0,0,0.85)]"
-          : "bg-[#fdfbfb]/95 border border-[#c9ada7] shadow-[0_8px_24px_rgba(34,34,59,0.18)]"
-        }`}>
+        <div 
+          className={`fixed right-6 lg:right-8 flex items-center gap-2 rounded-full p-2.5 pointer-events-auto transition-all duration-300 z-40 transform ${isVisible
+            ? "opacity-100 translate-y-0 scale-100"
+            : "opacity-0 translate-y-16 scale-90 pointer-events-none"
+          } ${isDarkMode
+            ? "bg-[#0e0e0e]/95 border border-[#1A1A1A] shadow-[0_8px_30px_rgba(0,0,0,0.85)]"
+            : "bg-[#fdfbfb]/95 border border-[#c9ada7] shadow-[0_8px_24px_rgba(34,34,59,0.18)]"
+          }`}
+          style={{ 
+            bottom: typeof window !== 'undefined' && window.innerWidth < 1024 
+              ? "calc(90px + env(safe-area-inset-bottom, 0px))" 
+              : "2rem" 
+          }}
+        >
         {/* Quick Add Custom Card or Custom Deck */}
+
         <Button
           onClick={onAddNewClick}
           variant="ghost"
@@ -211,6 +227,6 @@ export default function Header({
         </Button>
       </div>
       )}
-    </header>
+    </>
   );
 }

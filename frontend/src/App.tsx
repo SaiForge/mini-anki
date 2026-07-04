@@ -48,7 +48,10 @@ import {
   Info,
   Zap,
   BookOpen,
-  Search
+  Search,
+  MessageSquare,
+  BarChart2,
+  MoreHorizontal as MoreHorizontalIcon
 } from "lucide-react";
 
 export default function App() {
@@ -102,6 +105,7 @@ export default function App() {
   const [selectedProfileUsername, setSelectedProfileUsername] = useState<string | null>(null);
   const [showAiAssistant, setShowAiAssistant] = useState<boolean>(false);
   const [quickAddDrawerMode, setQuickAddDrawerMode] = useState<"publish" | "deck-only" | null>(null);
+  const [mobileMoreOpen, setMobileMoreOpen] = useState<boolean>(false);
   const [feedSubTab, setFeedSubTab] = useState<"ONLY_FOR_YOU" | "FOLLOWING">("ONLY_FOR_YOU");
 
   // Single post view state
@@ -1122,6 +1126,8 @@ export default function App() {
                 <DecksView
                   decks={decks}
                   stats={stats}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
                   isDarkMode={isDarkMode}
                   decksLoading={decksLoading}
                   onStudyDeck={(deckName, deckId, openInBrowseMode) => {
@@ -1290,6 +1296,7 @@ export default function App() {
                     setMessagesTargetUser(user);
                     setActiveTab("messages");
                   }}
+                  isDarkMode={isDarkMode}
                 />
               )}
 
@@ -1319,37 +1326,146 @@ export default function App() {
           </AnimatePresence>
         </main>
 
-        {/* Mobile / Tablet Bottom Navigation */}
-        <nav className="lg:hidden fixed bottom-0 left-0 w-full z-45 flex justify-around items-center h-16 bg-[#131313]/95 backdrop-blur-lg border-t border-[#1A1A1A]">
-          {[
-            { id: "decks", icon: Layers, label: "Decks" },
-            { id: "feed", icon: Compass, label: "Explore" },
-            { id: "explore", icon: Search, label: "Search" },
-            { id: "notifications", icon: Bell, label: "Logs" },
-            { id: "profile", icon: User, label: "Me" },
-            { id: "settings", icon: Settings, label: "Config" }
-          ].map((btn) => {
-            const Icon = btn.icon;
-            const isTabActive = activeTab === btn.id;
-            return (
-              <button
-                key={btn.id}
-                onClick={() => {
-                  handleRootTabClick(btn.id);
-                  setSearchQuery("");
+
+        {/* ── Floating Pill Bottom Navigation (Mobile Only) ── */}
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 pointer-events-none">
+          {/* Drop-up More Menu */}
+          {mobileMoreOpen && (
+            <>
+              {/* Backdrop */}
+              <div
+                className="fixed inset-0 z-40 pointer-events-auto"
+                onClick={() => setMobileMoreOpen(false)}
+              />
+              {/* Menu Pill */}
+              <div
+                className="fixed bottom-[calc(70px+env(safe-area-inset-bottom,0px))] right-2 z-50 pointer-events-auto rounded-2xl overflow-hidden shadow-2xl"
+                style={{
+                  marginBottom: "env(safe-area-inset-bottom, 0px)",
+                  background: isDarkMode
+                    ? "rgba(5,11,25,0.98)"
+                    : "rgba(253,251,251,0.98)",
+                  border: isDarkMode
+                    ? "1px solid rgba(16,45,55,0.8)"
+                    : "1px solid rgba(201,173,167,0.6)",
+                  backdropFilter: "blur(20px)",
+                  WebkitBackdropFilter: "blur(20px)",
+                  boxShadow: isDarkMode
+                    ? "0 -8px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04)"
+                    : "0 -8px 32px rgba(34,34,59,0.15)",
                 }}
-                className={`flex flex-col items-center justify-center p-2 text-center flex-1 cursor-pointer transition-all ${isTabActive ? "text-white font-bold scale-102" : "text-on-surface-variant/70 hover:text-white"
-                  }`}
               >
-                <Icon className="w-5 h-5" />
-                <span className="text-[10px] font-sans mt-1 font-medium tracking-wide">{btn.label}</span>
-              </button>
-            );
-          })}
+                <div className="grid grid-cols-3 gap-0 p-2 min-w-[210px]">
+                  {[
+                    { id: "notifications", icon: Bell, label: "Alerts" },
+                    { id: "analytics", icon: BarChart2, label: "Analytics" },
+                    { id: "settings", icon: Settings, label: "Settings" },
+                  ].map((item) => {
+                    const Icon = item.icon;
+                    const isActive = activeTab === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          handleRootTabClick(item.id);
+                          setSearchQuery("");
+                          setMobileMoreOpen(false);
+                        }}
+                        className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl transition-all duration-150 cursor-pointer no-select ${
+                          isActive
+                            ? isDarkMode
+                              ? "bg-white/10 text-white"
+                              : "bg-[#22223b]/10 text-[#22223b]"
+                            : isDarkMode
+                              ? "text-[#87a2b0] hover:text-white hover:bg-white/5"
+                              : "text-[#4a4e69] hover:text-[#22223b] hover:bg-[#22223b]/5"
+                        }`}
+                      >
+                        <Icon className="w-5 h-5" />
+                        <span className="text-[9px] font-mono tracking-wide font-medium">{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Full Width Bottom Nav */}
+          <div
+            className="pointer-events-auto flex items-center justify-between w-full px-2 pt-2 border-t"
+            style={{
+              paddingBottom: "calc(8px + env(safe-area-inset-bottom, 0px))",
+              background: isDarkMode
+                ? "rgba(5,11,25,0.95)"
+                : "rgba(253,251,251,0.98)",
+              borderTopColor: isDarkMode
+                ? "rgba(255,255,255,0.1)"
+                : "rgba(34,34,59,0.1)",
+              backdropFilter: "blur(24px)",
+              WebkitBackdropFilter: "blur(24px)",
+            }}
+          >
+            {[
+              { id: "decks", icon: Layers, label: "Deck" },
+              { id: "feed", icon: Home, label: "Home" },
+              { id: "explore", icon: Search, label: "Discover" },
+              { id: "messages", icon: MessageSquare, label: "Message" },
+              { id: "profile", icon: User, label: "Profile" },
+            ].map((btn) => {
+              const Icon = btn.icon;
+              const isTabActive = activeTab === btn.id;
+              return (
+                <button
+                  key={btn.id}
+                  onClick={() => {
+                    handleRootTabClick(btn.id);
+                    setSearchQuery("");
+                    setMobileMoreOpen(false);
+                  }}
+                  className={`relative flex flex-col items-center justify-center gap-1 flex-1 py-1.5 rounded-xl transition-all duration-200 cursor-pointer no-select ${
+                    isTabActive
+                      ? isDarkMode
+                        ? "text-white bg-white/10"
+                        : "text-[#1a1b26] bg-[#1a1b26]/10"
+                      : isDarkMode
+                        ? "text-[#87a2b0] hover:text-white"
+                        : "text-[#4a4e69] hover:text-[#22223b]"
+                  }`}
+                >
+                  <Icon className={`w-[18px] h-[18px] transition-transform duration-200 ${isTabActive ? "scale-110" : ""}`} />
+                  <span className={`text-[8.5px] font-mono tracking-wide font-semibold transition-all duration-200 ${isTabActive ? "opacity-100" : "opacity-60"}`}>
+                    {btn.label}
+                  </span>
+                </button>
+              );
+            })}
+
+            {/* More Button */}
+            <button
+              onClick={() => setMobileMoreOpen(prev => !prev)}
+              className={`flex flex-col items-center justify-center gap-1 flex-1 py-1.5 rounded-xl transition-all duration-200 cursor-pointer no-select ${
+                mobileMoreOpen || ["notifications","analytics","settings"].includes(activeTab)
+                  ? isDarkMode
+                    ? "text-white bg-white/10"
+                    : "text-[#1a1b26] bg-[#1a1b26]/10"
+                  : isDarkMode
+                    ? "text-[#87a2b0] hover:text-white"
+                    : "text-[#4a4e69] hover:text-[#22223b]"
+              }`}
+            >
+              <MoreHorizontalIcon className="w-[18px] h-[18px]" />
+              <span className="text-[8.5px] font-mono tracking-wide font-semibold opacity-60">More</span>
+            </button>
+          </div>
         </nav>
 
         {/* Padding offset helper for mobile navigation overlay */}
-        <div className="h-20 lg:hidden"></div>
+        {activeTab !== "messages" && (
+          <div className="h-24 lg:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }} />
+        )}
+
+
 
       </div>
 

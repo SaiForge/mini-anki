@@ -516,7 +516,7 @@ export default function StudySession({
   }
 
   return (
-    <div className={`fixed inset-0 z-50 flex flex-col justify-between p-6 overflow-y-auto font-sans select-none transition-colors ${isDarkMode ? "bg-black text-white" : "bg-[#f2e9e4] text-[#22223b]"
+    <div className={`fixed inset-0 z-50 flex flex-col justify-between p-4 sm:p-6 overflow-y-auto font-sans select-none transition-colors ${isDarkMode ? "bg-black text-white" : "bg-[#f2e9e4] text-[#22223b]"
       }`}>
 
       {/* Session Top Bar */}
@@ -816,7 +816,7 @@ export default function StudySession({
                 <div className="space-y-3 pt-4">
                   <p className={`text-center text-[10px] font-mono uppercase tracking-widest ${isDarkMode ? "text-on-surface-variant/40" : "text-[#4a4e69]/60"
                     }`}>How well did you know this?</p>
-                  <div className="grid grid-cols-4 gap-2 text-[11px] font-mono">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono">
                     {(["Again", "Hard", "Good", "Easy"] as SrsGrade[]).map((grade) => {
                       const styles: Record<SrsGrade, string> = {
                         Again: "border-red-900/60 text-red-400 hover:bg-red-950/30 hover:border-red-500",
