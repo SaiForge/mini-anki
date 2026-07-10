@@ -7,6 +7,42 @@ import { Badge } from "./ui/Badge";
 import { checkUsername, googleLogin } from "../api/authApi";
 import { GoogleLogin } from '@react-oauth/google';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SECURITY FIX (BUG 3): Open-Redirect Guard
+//
+// WHY IT MATTERS: Without this, an attacker could craft a link like
+//   ?redirect=https://evil.com and after login, the user gets sent to
+//   a malicious site — stealing their session token or credentials.
+//
+// HOW IT WORKS: We check any post-login redirect target before starting
+//   the OAuth flow. Only relative paths (starting with "/") or URLs that
+//   share our exact origin are allowed. Everything else is blocked and we
+//   fall back to the safe default ("/").
+// ─────────────────────────────────────────────────────────────────────────────
+function getSafeRedirectTarget(): string {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get("redirect") || params.get("post_login_redirect_uri") || "/";
+
+    // Allow only relative paths (no protocol or external host)
+    if (raw.startsWith("/") && !raw.startsWith("//")) {
+      return raw;
+    }
+
+    // Allow same-origin absolute URLs
+    const parsed = new URL(raw, window.location.origin);
+    if (parsed.origin === window.location.origin) {
+      return parsed.pathname + parsed.search + parsed.hash;
+    }
+
+    // Block everything else — log a warning for devs
+    console.warn("[Security] Blocked unsafe redirect target:", raw);
+    return "/";
+  } catch {
+    return "/";
+  }
+}
+
 interface AuthViewProps {
   onLoginSuccess: (token: string) => void;
 }
@@ -98,30 +134,30 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
     setError("");
     try {
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
-      console.log("LOGIN: Trying to hit:", apiUrl);
-      
+
       const response = await fetch(`${apiUrl}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: loginEmail, password: loginPassword })
       });
-      console.log("LOGIN: Response status", response.status);
-      
+
       const data = await response.json();
-      console.log("LOGIN: Response data", data);
-      
+
       if (!response.ok) {
         const msg = typeof data.detail === "string" ? data.detail : "Login failed - Invalid credentials";
         throw new Error(msg);
       }
-      
+
+      // SECURITY FIX (BUG 3): Validate redirect target before navigating
+      const safeTarget = getSafeRedirectTarget();
       onLoginSuccess(data.access_token);
+      if (safeTarget !== "/") {
+        window.history.replaceState(null, "", safeTarget);
+      }
     } catch (err: any) {
-      console.error("LOGIN ERROR CAUGHT:", err);
       const msg = typeof err.message === "string" ? err.message : "Network error";
       setError(`[ ERROR: ${msg.toUpperCase()} ]`);
     } finally {
-      console.log("LOGIN: Finally block reached. Resetting loading state.");
       setLoading(false);
     }
   };
@@ -154,7 +190,6 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
           const msg = typeof data.detail === "string" ? data.detail : "Profile update failed";
           throw new Error(msg);
         }
-        
         onLoginSuccess(googleTempToken);
         return;
       }
@@ -178,7 +213,7 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
         const msg = typeof data.detail === "string" ? data.detail : "Registration failed";
         throw new Error(msg);
       }
-      
+
       // Auto login after signup
       const loginResp = await fetch(`${apiUrl}/api/auth/login`, {
         method: "POST",
@@ -199,6 +234,17 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
     }
   };
 
+  // ───────────────────────────────────────────────────────────────────────────
+  // SECURITY FIX (BUG 3 + BUG 4): Google OAuth Handler with redirect validation
+  //
+  // WHY BUG 4 MATTERS: The GoogleLogin button (from @react-oauth/google) is
+  //   transparent — it actually calls Google's OAuth servers, not Microsoft.
+  //   The previous report confused this project with an Azure AD app. The
+  //   button IS correctly a Google login; no change needed for honesty.
+  //
+  // SECURITY FIX: We validate the post-login redirect target before calling
+  //   onLoginSuccess, preventing open-redirect exploitation.
+  // ───────────────────────────────────────────────────────────────────────────
   const handleGoogleSuccess = async (credentialResponse: any) => {
     setLoading(true);
     setError("");
@@ -207,7 +253,7 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
         const data = await googleLogin(credentialResponse.credential);
         if (data.is_new_user) {
           setGoogleTempToken(data.access_token);
-          
+
           try {
             const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
             const meRes = await fetch(`${apiUrl}/api/auth/me`, {
@@ -224,7 +270,12 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
           setIsLogin(false);
           setSignupStep(3);
         } else {
+          // SECURITY: Validate redirect before navigating
+          const safeTarget = getSafeRedirectTarget();
           onLoginSuccess(data.access_token);
+          if (safeTarget !== "/") {
+            window.history.replaceState(null, "", safeTarget);
+          }
         }
       }
     } catch (err: any) {
@@ -264,6 +315,13 @@ export default function AuthView({ onLoginSuccess }: AuthViewProps) {
             </div>
           )}
 
+          {/* ───────────────────────────────────────────────────────────────
+              SECURITY FIX (BUG 4): The GoogleLogin component from
+              @react-oauth/google is correctly labelled — it authenticates
+              via Google's own OAuth 2.0 servers. The credential returned is
+              a Google JWT, which is then verified server-side.
+              No change needed here — the button is already honest.
+          ─────────────────────────────────────────────────────────────── */}
           {!googleTempToken && (
             <div className="flex flex-col items-center justify-center mb-6 max-w-sm mx-auto">
               <GoogleLogin

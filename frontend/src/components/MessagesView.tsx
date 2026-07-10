@@ -236,12 +236,14 @@ export default function MessagesView({ currentUserId, searchQuery, isDarkMode = 
   useEffect(() => {
     if (!currentUserId) return;
     const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
-    const wsUrl = baseUrl.replace(/^http/, 'ws') + `/api/dm/ws/${currentUserId}`;
     let ws: WebSocket | null = null;
     let reconnectTimeout: ReturnType<typeof setTimeout>;
 
     const connectWS = () => {
-      console.log("Connecting to WebSocket:", wsUrl);
+      // SECURITY FIX (Critical #2): Pass JWT token for server-side WebSocket auth.
+      const token = localStorage.getItem("access_token") || "";
+      const wsUrl = baseUrl.replace(/^http/, 'ws') + `/api/dm/ws/${currentUserId}?token=${encodeURIComponent(token)}`;
+      console.log("Connecting to WebSocket:", wsUrl.replace(/token=[^&]+/, "token=***"));
       ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {

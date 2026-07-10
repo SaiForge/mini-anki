@@ -16,3 +16,7 @@ websockets==12.0
 google-auth==2.25.1
 requests==2.31.0
 gunicorn
+# SECURITY: Rate limiting (Critical #4)
+slowapi==0.1.9
+# SECURITY: Magic-byte file type detection (Low #12) — pure Python, no system deps
+filetype==1.2.0

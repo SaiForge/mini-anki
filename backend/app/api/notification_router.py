@@ -15,6 +15,9 @@ import uuid
 from datetime import datetime
 import json
 import asyncio
+# SECURITY FIX (Critical #2): JWT auth for WebSocket endpoints
+from jose import jwt, JWTError
+from app.core.security import SECRET_KEY, ALGORITHM
 
 from app.db.redis import get_redis_sync, get_redis_async
 
@@ -192,7 +195,24 @@ def _serialize(n: Notification) -> dict:
 
 
 @router.websocket("/ws/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, user_id: uuid.UUID):
+async def websocket_endpoint(
+    websocket: WebSocket,
+    user_id: uuid.UUID,
+    # SECURITY FIX (Critical #2): JWT auth — same pattern as dm_router
+    token: str = Query(..., description="JWT access token"),
+):
+    # Validate token before accepting the connection
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        token_user_id = uuid.UUID(payload.get("sub", ""))
+    except (JWTError, ValueError):
+        await websocket.close(code=1008)
+        return
+
+    if token_user_id != user_id:
+        await websocket.close(code=1008)
+        return
+
     await manager.connect(websocket, user_id)
     redis_async = get_redis_async()
     pubsub = None
@@ -205,7 +225,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: uuid.UUID):
             if message["type"] == "message":
                 try:
                     data = json.loads(message["data"])
-                    print(f"WS listener got notif for {user_id}")
                     await manager.send_personal_message(data, user_id)
                 except Exception as e:
                     print(f"WS send notif error: {e}")

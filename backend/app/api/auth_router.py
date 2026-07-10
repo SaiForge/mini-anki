@@ -1,8 +1,13 @@
 import os
-from fastapi import APIRouter, Depends, HTTPException, status
+import logging
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.all_models import User
+# SECURITY FIX (Critical #4): Rate limiting on auth endpoints
+from app.core.limiter import limiter
+
+logger = logging.getLogger(__name__)
 from app.schemas.user_schema import (
     UserCreate,
     UserLogin,
@@ -52,7 +57,9 @@ def send_password_reset_email(email: str, token: str) -> None:
 @router.post(
     "/register", response_model=MessageResponse, status_code=status.HTTP_201_CREATED
 )
-def register_user(user: UserCreate, db: Session = Depends(get_db)):
+# SECURITY: 3 registrations per IP per minute — prevents automated account farms
+@limiter.limit("3/minute")
+def register_user(request: Request, user: UserCreate, db: Session = Depends(get_db)):
     # Check if email already exists
     db_email = db.query(User).filter(User.email == user.email).first()
     if db_email:
@@ -107,7 +114,10 @@ def check_username(username: str, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
-def login_user(user: UserLogin, db: Session = Depends(get_db)):
+# SECURITY FIX (Critical #4): 5 attempts per IP per minute prevents brute-force.
+# At 5 guesses/min it would take 4+ years to brute-force even a weak 6-char password.
+@limiter.limit("5/minute")
+def login_user(request: Request, user: UserLogin, db: Session = Depends(get_db)):
     # Find user
     db_user = db.query(User).filter(User.email == user.email).first()
     if not db_user or not verify_password(user.password, db_user.password_hash):
@@ -180,7 +190,9 @@ def authenticate_with_google(payload: GoogleAuthPayload, db: Session = Depends(g
     except ValueError:
         raise HTTPException(status_code=401, detail="Invalid Google Token. Authentication Failed.")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+        # SECURITY FIX (High #5): Log internally, never expose str(e) to clients
+        logger.error("Google auth error: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Authentication failed. Please try again.")
 
 
 @router.get("/me", response_model=UserResponse)
@@ -298,9 +310,9 @@ def delete_current_user(current_user: User = Depends(get_current_user), db: Sess
         print(f"[DELETE ACCOUNT] SUCCESS: user {uid} deleted")
     except Exception as e:
         raw_conn.rollback()
-        err_str = tb.format_exc()
-        print(f"[DELETE ACCOUNT] ERROR: {err_str}")
-        raise HTTPException(status_code=500, detail=f"Failed to delete account: {str(e)}")
+        # SECURITY FIX (High #5): Log full traceback server-side, return generic message
+        logger.error("[DELETE ACCOUNT] ERROR for user %s: %s", uid, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Account deletion failed. Please contact support.")
     finally:
         cur.close()
         raw_conn.close()
@@ -375,20 +387,24 @@ def get_public_user_profile(username: str, db: Session = Depends(get_db)):
 
 
 @router.post("/forgot-password", response_model=MessageResponse)
-def forgot_password(request: UserEmailRequest, db: Session = Depends(get_db)):
+# SECURITY: 3 resets per IP per minute — prevents email bombing/enumeration via timing
+@limiter.limit("3/minute")
+def forgot_password(request: Request, body: UserEmailRequest, db: Session = Depends(get_db)):
     """Request password reset email."""
-    db_user = db.query(User).filter(User.email == request.email).first()
-    
+    db_user = db.query(User).filter(User.email == body.email).first()
+
     if not db_user:
-        # Don't reveal if user exists or not for security
+        # SECURITY: Same response regardless of whether user exists — prevents email enumeration
         return {"message": "If an account exists with this email, a password reset link has been sent."}
-    
+
     try:
         reset_token = create_password_reset_token(db_user.email)
         send_password_reset_email(db_user.email, reset_token)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error sending reset email: {str(e)}")
-    
+        # SECURITY FIX (High #5): Don't expose email service internals
+        logger.error("Password reset email failed for %s: %s", body.email, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not send reset email. Please try again later.")
+
     return {"message": "If an account exists with this email, a password reset link has been sent."}
 
 

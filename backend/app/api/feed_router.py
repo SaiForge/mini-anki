@@ -1,9 +1,10 @@
 import uuid
 from typing import Optional, List
+from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, validator
 from app.db.database import get_db
 from app.models.all_models import User, Post, PostLike, Bookmark, Comment, Follow
 from app.api.deps import get_current_user
@@ -15,24 +16,63 @@ router = APIRouter(tags=["Feed"])
 
 # ─── Pydantic Schemas ──────────────────────────────────────────────────────────
 
+# SECURITY FIX (High #8): SSRF-safe image URL validator
+# WHY: Without this, a malicious user could store a URL like
+# http://169.254.169.254/latest/meta-data/ (AWS metadata service) and if the
+# backend ever fetches it, an attacker gains cloud credentials.
+_BLOCKED_HOSTS = (
+    "169.254.",   # AWS/Azure link-local metadata
+    "10.",        # RFC-1918 private
+    "192.168.",   # RFC-1918 private
+    "172.16.",    # RFC-1918 private
+    "127.",       # loopback
+    "localhost",  # loopback hostname
+    "metadata",   # cloud metadata keyword
+    "0.0.0.0",
+)
+
+def _validate_image_url(v: Optional[str]) -> Optional[str]:
+    if v is None:
+        return v
+    try:
+        parsed = urlparse(v)
+    except Exception:
+        raise ValueError("Invalid URL format")
+    if parsed.scheme != "https":
+        raise ValueError("Only HTTPS image URLs are allowed")
+    hostname = (parsed.hostname or "").lower()
+    if any(hostname.startswith(b) for b in _BLOCKED_HOSTS):
+        raise ValueError("Internal or metadata URLs are not allowed")
+    return v
+
+
 class PostCreate(BaseModel):
     content_type: str = "CONCEPT"
-    title: Optional[str] = None
-    body: str
-    code_snippet: Optional[str] = None
+    title: Optional[str] = Field(None, max_length=300)
+    body: str = Field(..., min_length=1, max_length=10000)
+    code_snippet: Optional[str] = Field(None, max_length=20000)
     image_url: Optional[str] = None
-    category: Optional[str] = None
+    category: Optional[str] = Field(None, max_length=100)
     is_private: bool = False
     deck_id: Optional[uuid.UUID] = None
 
+    # SECURITY FIX (High #8): Validate image_url against SSRF block list
+    @validator("image_url")
+    def validate_image_url(cls, v):
+        return _validate_image_url(v)
+
 
 class PostUpdate(BaseModel):
-    title: Optional[str] = None
-    body: Optional[str] = None
-    code_snippet: Optional[str] = None
+    title: Optional[str] = Field(None, max_length=300)
+    body: Optional[str] = Field(None, max_length=10000)
+    code_snippet: Optional[str] = Field(None, max_length=20000)
     image_url: Optional[str] = None
-    category: Optional[str] = None
+    category: Optional[str] = Field(None, max_length=100)
     is_private: Optional[bool] = None
+
+    @validator("image_url")
+    def validate_image_url(cls, v):
+        return _validate_image_url(v)
 
 
 class CommentCreate(BaseModel):

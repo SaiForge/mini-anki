@@ -10,8 +10,9 @@ Uses GEMINI_API_KEY env var. Falls back to smart mock responses if key not set.
 """
 import os
 import json
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from pydantic import BaseModel
+import logging
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
+from pydantic import BaseModel, Field
 from typing import Optional, List
 
 from app.models.all_models import User, AISession
@@ -20,36 +21,43 @@ from app.api.deps import get_current_user
 from app.services.ai_service import AIService
 from app.db.database import get_db
 from sqlalchemy.orm import Session
+# SECURITY FIX (Critical #4): Rate limiting on AI endpoints
+from app.core.limiter import limiter
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/ai", tags=["AI Companion"])
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 
 # ─── Schemas ──────────────────────────────────────────────────────────────────
+# SECURITY FIX (Medium #10): Bounded input fields on all AI schemas.
+# WHY: Unbounded inputs let one user send 50,000-char prompts per request,
+# exhausting the Gemini API quota and running up costs for everyone.
 
 class ChatMessage(BaseModel):
-    role: str  # "user" or "model"
-    text: str
+    role: str = Field(..., max_length=10)   # "user" or "model"
+    text: str = Field(..., max_length=2000)
 
 
 class ChatRequest(BaseModel):
-    message: str
-    history: Optional[List[ChatMessage]] = []
+    message: str = Field(..., min_length=1, max_length=2000)
+    # Cap history at 20 turns — beyond that, context isn’t helpful and tokens are expensive
+    history: Optional[List[ChatMessage]] = Field(default=[], max_items=20)
 
 
 class ExplainRequest(BaseModel):
-    concept: str
-    context: Optional[str] = None
+    concept: str = Field(..., min_length=1, max_length=1000)
+    context: Optional[str] = Field(None, max_length=2000)
 
 
 class QuizRequest(BaseModel):
-    topic: str
-    count: int = 3
+    topic: str = Field(..., min_length=1, max_length=500)
+    count: int = Field(3, ge=1, le=10)
 
 
 class SummarizeRequest(BaseModel):
-    text: str
+    text: str = Field(..., min_length=1, max_length=10000)
 
 
 # ─── Gemini helper ────────────────────────────────────────────────────────────
@@ -151,7 +159,10 @@ def _fallback_response(topic: str) -> str:
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
 @router.post("/chat")
+# SECURITY: 30 AI calls per IP per minute — prevents quota exhaustion
+@limiter.limit("30/minute")
 def chat(
+    request: Request,
     req: ChatRequest,
     current_user: User = Depends(get_current_user),
 ):
@@ -170,17 +181,20 @@ def chat(
         if "GEMINI_API_KEY" in str(e):
             reply = _fallback_response(req.message)
         else:
-            raise HTTPException(status_code=502, detail=str(e))
+            raise HTTPException(status_code=502, detail="AI service error. Please try again.")
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"AI service error: {str(e)}")
+        logger.error("AI chat error: %s", e, exc_info=True)
+        raise HTTPException(status_code=502, detail="AI service temporarily unavailable.")
 
     return {"reply": reply, "role": "model"}
 
 
 @router.post("/explain")
+@limiter.limit("30/minute")
 def explain_concept(
+    request: Request,
     req: ExplainRequest,
     current_user: User = Depends(get_current_user),
 ):
@@ -195,13 +209,16 @@ def explain_concept(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        logger.error("AI explain error: %s", e, exc_info=True)
+        raise HTTPException(status_code=502, detail="AI service temporarily unavailable.")
 
     return {"explanation": reply}
 
 
 @router.post("/quiz")
+@limiter.limit("20/minute")
 def generate_quiz(
+    request: Request,
     req: QuizRequest,
     current_user: User = Depends(get_current_user),
 ):
@@ -234,13 +251,16 @@ def generate_quiz(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        logger.error("AI quiz error: %s", e, exc_info=True)
+        raise HTTPException(status_code=502, detail="AI service temporarily unavailable.")
 
     return {"topic": req.topic, "questions": questions}
 
 
 @router.post("/summarize")
+@limiter.limit("30/minute")
 def summarize(
+    request: Request,
     req: SummarizeRequest,
     current_user: User = Depends(get_current_user),
 ):
@@ -256,7 +276,8 @@ def summarize(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        logger.error("AI summarize error: %s", e, exc_info=True)
+        raise HTTPException(status_code=502, detail="AI service temporarily unavailable.")
 
     return {"summary": reply}
 
@@ -264,13 +285,13 @@ def summarize(
 # ─── Card Generation Schemas ──────────────────────────────────────────────────
 
 class GenerateCardsRequest(BaseModel):
-    topic: str
-    count: int = 5
+    topic: str = Field(..., min_length=1, max_length=500)
+    count: int = Field(5, ge=1, le=15)
 
 
 class ExtractCardsRequest(BaseModel):
-    text: str
-    count: int = 10
+    text: str = Field(..., min_length=1, max_length=10000)
+    count: int = Field(10, ge=1, le=15)
 
 
 # ─── Card Generation Helpers ──────────────────────────────────────────────────
@@ -335,11 +356,12 @@ def generate_cards(
         if "GEMINI_API_KEY" in str(e) or "No cards" in str(e):
             cards = _fallback_cards(req.topic, count)
         else:
-            raise HTTPException(status_code=502, detail=str(e))
+            raise HTTPException(status_code=502, detail="AI service error. Please try again.")
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"AI service error: {str(e)}")
+        logger.error("AI generate-cards error: %s", e, exc_info=True)
+        raise HTTPException(status_code=502, detail="AI service temporarily unavailable.")
 
     return {"topic": req.topic, "cards": cards}
 
@@ -369,11 +391,12 @@ def extract_cards_from_text(
             sentences = [s.strip() for s in req.text.split(". ") if len(s.strip()) > 20]
             cards = [{"front": f"What does this mean: '{s[:80]}...'?", "back": s} for s in sentences[:3]]
         else:
-            raise HTTPException(status_code=502, detail=str(e))
+            raise HTTPException(status_code=502, detail="AI service error. Please try again.")
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"AI service error: {str(e)}")
+        logger.error("AI extract-cards error: %s", e, exc_info=True)
+        raise HTTPException(status_code=502, detail="AI service temporarily unavailable.")
 
     return {"cards": cards}
 
@@ -407,7 +430,8 @@ async def extract_cards_from_pdf(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=422, detail=f"Could not parse PDF: {str(e)}")
+        logger.error("PDF parse error: %s", e, exc_info=True)
+        raise HTTPException(status_code=422, detail="Could not parse PDF. Ensure it contains readable text.")
 
     if not extracted_text:
         raise HTTPException(status_code=422, detail="No readable text found in the PDF.")
@@ -432,11 +456,12 @@ async def extract_cards_from_pdf(
             sentences = [s.strip() for s in extracted_text.split(". ") if len(s.strip()) > 20]
             cards = [{"front": f"What does this mean: '{s[:80]}...'?", "back": s} for s in sentences[:3]]
         else:
-            raise HTTPException(status_code=502, detail=str(e))
+            raise HTTPException(status_code=502, detail="AI service error. Please try again.")
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"AI service error: {str(e)}")
+        logger.error("AI extract-pdf error: %s", e, exc_info=True)
+        raise HTTPException(status_code=502, detail="AI service temporarily unavailable.")
 
     return {
         "filename": file.filename,
@@ -446,7 +471,7 @@ async def extract_cards_from_pdf(
 
 
 class GeneratePromptRequest(BaseModel):
-    prompt: str
+    prompt: str = Field(..., min_length=1, max_length=2000)
 
 @router.post("/generate")
 def generate_flashcards(

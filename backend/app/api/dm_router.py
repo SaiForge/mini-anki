@@ -12,7 +12,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func, desc
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
 import json
 import asyncio
@@ -22,6 +22,9 @@ from app.models.all_models import DirectMessage, User
 from app.api.deps import get_current_user
 from app.api.notification_router import create_notification
 from app.db.redis import get_redis_sync, get_redis_async
+# SECURITY FIX (Critical #2): JWT imports for WebSocket authentication
+from jose import jwt, JWTError
+from app.core.security import SECRET_KEY, ALGORITHM
 
 router = APIRouter(prefix="/api/dm", tags=["Direct Messages"])
 
@@ -55,7 +58,9 @@ manager = ConnectionManager()
 
 
 class MessageCreate(BaseModel):
-    body: str
+    # SECURITY FIX (Medium #9): Cap message size — prevents storage exhaustion / DoS.
+    # 4000 chars aligns with WhatsApp/Twitter norms and prevents DB bloat.
+    body: str = Field(..., min_length=1, max_length=4000)
 
 
 def _serialize_msg(m: DirectMessage) -> dict:
@@ -286,7 +291,29 @@ def edit_message(
 
 
 @router.websocket("/ws/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, user_id: uuid.UUID):
+async def websocket_endpoint(
+    websocket: WebSocket,
+    user_id: uuid.UUID,
+    # SECURITY FIX (Critical #2): Require JWT as a query param.
+    # WHY: WebSocket handshakes don’t support Authorization headers in all browsers.
+    # The token is validated before accepting the connection — unauthenticated
+    # connections are rejected with code 1008 (Policy Violation).
+    token: str = Query(..., description="JWT access token"),
+):
+    # Validate token before accepting the WebSocket connection
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        token_user_id = uuid.UUID(payload.get("sub", ""))
+    except (JWTError, ValueError):
+        await websocket.close(code=1008)  # 1008 = Policy Violation
+        return
+
+    # Ensure the token owner matches the requested DM channel
+    # (prevents user A from subscribing to user B’s real-time messages)
+    if token_user_id != user_id:
+        await websocket.close(code=1008)
+        return
+
     await manager.connect(websocket, user_id)
     redis_async = get_redis_async()
     pubsub = None
@@ -299,7 +326,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: uuid.UUID):
             if message["type"] == "message":
                 try:
                     data = json.loads(message["data"])
-                    print(f"WS listener got message for {user_id}")
                     await manager.send_personal_message(data, user_id)
                 except Exception as e:
                     print(f"WS send error: {e}")
@@ -311,7 +337,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: uuid.UUID):
 
     try:
         while True:
-            # Keep connection alive, listen for any messages from client
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket, user_id)

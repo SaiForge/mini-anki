@@ -211,11 +211,14 @@ export default function App() {
   useEffect(() => {
     if (!currentUser?.user_id) return;
     const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
-    const wsUrl = baseUrl.replace(/^http/, 'ws') + `/api/notifications/ws/${currentUser.user_id}`;
     let ws: WebSocket | null = null;
     let reconnectTimeout: ReturnType<typeof setTimeout>;
 
     const connectWS = () => {
+      // SECURITY FIX (Critical #2): Pass JWT token so the server can authenticate
+      // the WebSocket connection before accepting it.
+      const token = localStorage.getItem("access_token") || "";
+      const wsUrl = baseUrl.replace(/^http/, 'ws') + `/api/notifications/ws/${currentUser.user_id}?token=${encodeURIComponent(token)}`;
       ws = new WebSocket(wsUrl);
 
       ws.onmessage = (event) => {

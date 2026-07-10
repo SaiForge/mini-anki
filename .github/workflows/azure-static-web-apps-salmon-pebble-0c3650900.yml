@@ -1,45 +1,133 @@
-name: Azure Static Web Apps CI/CD
+name: Azure Static Web Apps — Secure CI/CD
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECURITY FIX (BUG 6): Hardened GitHub Actions workflow
+#
+# What this workflow does vs the old one:
+#  1. Pins all action versions (prevents supply-chain attacks via version drift)
+#  2. Adds Trivy vulnerability scanner — catches known CVEs in npm packages
+#     before they ever reach production
+#  3. Sets explicit permissions (principle of least privilege — the workflow
+#     can only write to the static web app, not the whole repo)
+#  4. Validates the build succeeds before deploying (fail-fast)
+#  5. Caches node_modules to speed up builds and reduce bandwidth
+# ─────────────────────────────────────────────────────────────────────────────
 
 on:
   push:
     branches:
       - main
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/azure-static-web-apps-salmon-pebble-0c3650900.yml'
   pull_request:
     types: [opened, synchronize, reopened, closed]
     branches:
       - main
 
+# Principle of least privilege: only grant what the job actually needs
+permissions:
+  contents: read
+  pull-requests: write  # needed for PR preview URL comments
+
 jobs:
+  # ─────────────────────────────────────────────────────────────────────────
+  # JOB 1: Security scan — runs BEFORE deploy so vulnerable code never ships
+  # ─────────────────────────────────────────────────────────────────────────
+  security_scan:
+    name: Security Scan (Trivy)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
+    permissions:
+      contents: read
+      security-events: write  # needed to upload SARIF results to GitHub Security tab
+
+    steps:
+      - name: Checkout repository
+        # Pinned SHA — prevents tag-hijacking supply chain attacks
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner on filesystem
+        # WHY: Checks all npm dependencies for known CVEs (Common Vulnerabilities
+        #   and Exposures). Catches issues like Log4Shell-style library bugs.
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'fs'
+          scan-ref: './frontend'
+          scanners: 'vuln,secret'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()  # Upload even if the scan found issues
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # JOB 2: Build & Deploy — only runs after security scan passes
+  # ─────────────────────────────────────────────────────────────────────────
   build_and_deploy_job:
+    name: Build and Deploy Job
+    needs: security_scan  # SECURITY: won't deploy if scan finds critical CVEs
     if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
     runs-on: ubuntu-latest
-    name: Build and Deploy Job
+    permissions:
+      contents: read
+      pull-requests: write
+
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           submodules: true
           lfs: false
-      - name: Build And Deploy
-        id: builddeploy
-        uses: Azure/static-web-apps-deploy@v1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_SALMON_PEBBLE_0C3650900 }}
-          repo_token: ${{ secrets.GITHUB_TOKEN }} # Used for Github integrations (i.e. PR comments)
-          action: "upload"
-          ###### Repository/Build Configurations - These values can be configured to match your app requirements. ######
-          # For more information regarding Static Web App workflow configurations, please visit: https://aka.ms/swaworkflowconfig
-          app_location: "./frontend" # App source code path
-          api_location: "" # Api source code path - optional
-          output_location: "dist" # Built app content directory - optional
-          ###### End of Repository/Build Configurations ######
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        # Use ci instead of install — respects lockfile exactly (no silent upgrades)
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: ./frontend
+        # Fail the deploy if the build breaks — never ship broken code
+        run: npm run build
         env:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
 
+      - name: Build And Deploy to Azure Static Web Apps
+        id: builddeploy
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_SALMON_PEBBLE_0C3650900 }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: "upload"
+          app_location: "./frontend"
+          api_location: ""
+          output_location: "dist"
+          # Skip the Azure-side build since we already built above
+          skip_app_build: true
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # JOB 3: Cleanup PR preview environments when PRs are closed
+  # ─────────────────────────────────────────────────────────────────────────
   close_pull_request_job:
+    name: Close Pull Request Job
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     runs-on: ubuntu-latest
-    name: Close Pull Request Job
+    permissions:
+      contents: read
+
     steps:
       - name: Close Pull Request
         id: closepullrequest

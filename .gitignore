@@ -51,3 +51,6 @@ get_*.js
 
 # Node
 node_modules/
+
+
+/README-SECURITY-FIXES.md

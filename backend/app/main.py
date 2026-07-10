@@ -1,3 +1,6 @@
+import os
+import logging
+
 from app.api import auth_router, deck_router, study_router, social_router, feed_router
 from app.api.explore_router import explore_router, deck_share_router
 from app.api.notification_router import router as notification_router
@@ -9,32 +12,83 @@ from app.api.ai_router import router as ai_router
 # app/main.py
 from app.db.database import engine, get_db
 from app.models import all_models
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.db.redis import init_redis, close_redis
 
+# SECURITY FIX (Critical #4): Rate limiting
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from app.core.limiter import limiter
+
+logger = logging.getLogger(__name__)
+
 # This creates the tables in PostgreSQL if they don't exist yet
 all_models.Base.metadata.create_all(bind=engine)
 
-CORSMiddleware
+# ─────────────────────────────────────────────────────────────────────────────
+# SECURITY FIX (Medium #11): Disable Swagger/OpenAPI docs in production.
+#
+# WHY: The interactive API docs at /docs expose every endpoint, schema, and
+# a "Try it out" button — effectively handing attackers a ready-made attack
+# surface. Set ENVIRONMENT=production in your Azure App Service config.
+# ─────────────────────────────────────────────────────────────────────────────
+IS_PRODUCTION = os.getenv("ENVIRONMENT", "development") == "production"
 
-# Initialize the application
 app = FastAPI(
     title="Study Lab API",
     description="Multi-user spaced repetition flashcard backend.",
     version="1.0.0",
+    docs_url=None if IS_PRODUCTION else "/docs",
+    redoc_url=None if IS_PRODUCTION else "/redoc",
+    openapi_url=None if IS_PRODUCTION else "/openapi.json",
 )
 
-import os
+# Attach the rate limiter to app state so slowapi can find it
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS Configuration — read from env so it works in both local dev and production
+# ─────────────────────────────────────────────────────────────────────────────
+# SECURITY FIX (High #5): Global exception handler.
+#
+# WHY: Unhandled Python exceptions can bubble up as 500 responses that include
+# stack traces, file paths, DB schema, or library internals — intelligence
+# that attackers use for reconnaissance. This handler logs the full detail
+# internally while returning a generic message to the client.
+# ─────────────────────────────────────────────────────────────────────────────
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(
+        "Unhandled exception on %s %s: %s",
+        request.method,
+        request.url.path,
+        exc,
+        exc_info=True,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An internal error occurred. Please try again later."},
+    )
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CORS Configuration
+#
+# SECURITY FIX (High #6): Replaced allow_methods=["*"] and allow_headers=["*"]
+#   with explicit allowlists. The wildcard enabled TRACE (Cross-Site Tracing)
+#   and allowed arbitrary custom headers.
+#
+# SECURITY FIX (High #7): Removed hardcoded public EC2 IP (18.118.210.98).
+#   A static IP is a fragile, untestable trust anchor. Use EXTRA_CORS_ORIGIN
+#   env var instead so it's configurable per environment.
+# ─────────────────────────────────────────────────────────────────────────────
 _frontend_url = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173")
-_vite_url = os.getenv("VITE_API_URL", "")  # sometimes frontend sends this
 _azure_url = os.getenv("AZURE_STATIC_WEB_APP_URL", "")
+_extra_origin = os.getenv("EXTRA_CORS_ORIGIN", "")  # replaces hardcoded EC2 IP
 
 origins = [
     "http://localhost:5173",
@@ -44,28 +98,24 @@ origins = [
 ]
 
 if _azure_url:
-    origins.append(_azure_url)
-    # Also add the URL with a trailing slash just in case
-    if _azure_url.endswith("/"):
-        origins.append(_azure_url.rstrip("/"))
-    else:
-        origins.append(_azure_url + "/")
-# Also allow the deployed EC2 frontend (port 5173)
-_ec2_ip = "18.118.210.98"
-origins += [f"http://{_ec2_ip}:5173", f"http://{_ec2_ip}", f"https://{_ec2_ip}"]
-# Deduplicate
+    origins.append(_azure_url.rstrip("/"))
+if _extra_origin:
+    origins.append(_extra_origin.rstrip("/"))
+
+# Deduplicate and remove empty strings
 origins = list(dict.fromkeys(o for o in origins if o))
 
-# Attach the security middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1):\d+",  # any local port
+    # Local dev: allow any localhost port (still HTTP-only, safe for dev)
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1):\d+",
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    # Explicit methods only — no TRACE, no CONNECT
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    # Explicit headers only
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
 )
-
 
 
 @app.on_event("startup")
@@ -84,16 +134,16 @@ def migrate_database_schema():
         "ALTER TABLE users ADD COLUMN username VARCHAR(50);",
         "ALTER TABLE users ADD COLUMN full_name VARCHAR(100);",
         "ALTER TABLE users ADD COLUMN bio TEXT;",
-                "ALTER TABLE decks ADD COLUMN comment_count INTEGER DEFAULT 0;",
+        "ALTER TABLE decks ADD COLUMN comment_count INTEGER DEFAULT 0;",
         "ALTER TABLE decks ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;"
     ]
-    
+
     for query in columns_to_add:
         try:
             with engine.begin() as connection:
                 connection.execute(text(query))
             print(f"Successfully executed: {query}")
-        except Exception as e:
+        except Exception:
             # Normal if column already exists
             pass
 
