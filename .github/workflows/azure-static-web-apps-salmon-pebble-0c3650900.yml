@@ -50,7 +50,7 @@ jobs:
       - name: Run Trivy vulnerability scanner on filesystem
         # WHY: Checks all npm dependencies for known CVEs (Common Vulnerabilities
         #   and Exposures). Catches issues like Log4Shell-style library bugs.
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
           scan-ref: './frontend'
