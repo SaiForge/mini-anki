@@ -88,7 +88,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # ─────────────────────────────────────────────────────────────────────────────
 _frontend_url = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173")
 _azure_url = os.getenv("AZURE_STATIC_WEB_APP_URL", "")
-_extra_origin = os.getenv("EXTRA_CORS_ORIGIN", "")  # replaces hardcoded EC2 IP
+_extra_origin = os.getenv("EXTRA_CORS_ORIGIN", "") 
 
 origins = [
     "http://localhost:5173",
@@ -109,7 +109,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     # Local dev: allow any localhost port (still HTTP-only, safe for dev)
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1):\d+",
+    # Also allow any azurestaticapps.net subdomain for deployed frontend
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1):\d+|https://.*\.azurestaticapps\.net",
     allow_credentials=True,
     # Explicit methods only — no TRACE, no CONNECT
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
